@@ -7,3 +7,4 @@ data/estudio.log
 data/
 .claude/
 Estudio.app/Contents/Resources/*.log
+modules/talking-head/engine/models/
