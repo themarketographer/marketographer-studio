@@ -1,0 +1,23 @@
+{
+  "name": "marketographer-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Estudio de contenido de The Marketographer: guiones y edición con formatos propios.",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
+    "@napi-rs/canvas": "^1.0.11",
+    "ffmpeg-static": "^5.3.0",
+    "onnxruntime-node": "^1.30.0"
+  }
+}

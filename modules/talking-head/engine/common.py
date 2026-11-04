@@ -1,0 +1,149 @@
+"""Utilidades compartidas del motor: rutas, ffmpeg, estado de progreso y lectura de JSON."""
+import json, os, shutil, subprocess, urllib.request
+from pathlib import Path
+
+ENGINE = Path(__file__).resolve().parent
+FONTS = ENGINE / "fonts"
+MODELS = ENGINE / "models"
+RVM_URL = "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
+
+
+def ffmpeg_exe():
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        p = shutil.which("ffmpeg")
+        if p:
+            return p
+        raise RuntimeError("No encontré ffmpeg. Ejecuta Instalar.command de nuevo.")
+
+
+def load(proj, name, default=None):
+    p = Path(proj) / name
+    if not p.exists():
+        return default
+    return json.loads(p.read_text(encoding="utf8"))
+
+
+def save(proj, name, data):
+    p = Path(proj) / name
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf8")
+    os.replace(tmp, p)
+
+
+def status(proj, etapa, pct, msg="", error=None):
+    """Escribe status.json para que la interfaz muestre el progreso."""
+    save(proj, "status.json", {"etapa": etapa, "pct": round(float(pct), 1), "msg": msg, "error": error})
+    print(f"[{etapa}] {pct:.0f}% {msg}", flush=True)
+
+
+def ensure_model():
+    MODELS.mkdir(exist_ok=True)
+    dst = MODELS / "rvm.onnx"
+    if not dst.exists() or dst.stat().st_size < 10_000_000:
+        print("Descargando el modelo de recorte (15 MB)...", flush=True)
+        tmp = dst.with_suffix(".part")
+        urllib.request.urlretrieve(RVM_URL, tmp)
+        os.replace(tmp, dst)
+    return dst
+
+
+DEFAULT_STYLE = {
+    "font": "Anton-Regular.ttf", "emphFont": "", "accent": "#fddc5b", "text": "#FFFFFF",
+    "tracking": 0.0, "glow": 0.7, "contorno": 0.0,
+    "desenfoque": 0.8, "zooms": True, "sonidos": True, "titulos": True,
+    "densidad": 2, "posiciones": ["detras", "arriba", "centro", "abajo"],
+    "animaciones": ["pop", "deslizar", "escribir"], "sonidoTitulos": "auto",
+    "zoomIntensidad": 1.0, "zoomFrecuencia": "normal", "zoomEstilo": "normal", "zoomDeriva": False, "sfxZoom": "none", "sfxVol": 1.0, "sfxCierre": "ding", "sfxPorAnim": {}, "sfxTipos": {}, "sfxGanancia": {}, "zoomBN": False, "motionBlur": 0.0, "motionBlurSobre": "fondo", "motionBlurModo": "zoom", "fondoModo": "titulos", "titulosCaso": "mayus", "sombra": 1.0,
+    "pelicula": {"on": False, "bloom": 0.6, "umbral": 0.72, "tamano": 0.5, "halacion": 0.5, "grano": 0.35, "desvanecido": 0.25, "calidez": 0.4, "sobreMi": True},
+    "imagen": {"contraste": 1.0, "saturacion": 1.0, "brillo": 0, "vineta": 0.0, "bloom": 0.0, "degradado": 0.0},
+    "subs": {"on": True, "font": "Poppins-ExtraBold.ttf", "emphFont": "", "size": "L", "y": 0.74, "maxPal": 3,
+             "mayus": True, "caso": "", "conGrande": "completo", "pulso": True,"resalte": "palabra", "claves": True, "caja": False, "tracking": 0.0, "glow": 0.0, "contorno": 0.8},
+}
+
+
+def merge_style(s):
+    """Completa un estilo guardado con los valores por defecto (los proyectos viejos siguen funcionando)."""
+    import copy
+    out = copy.deepcopy(DEFAULT_STYLE)
+    for k, v in (s or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k].update(v)
+        else:
+            out[k] = v
+    im, pe = out.get("imagen", {}), out["pelicula"]
+    if float(im.get("bloom", 0) or 0) > 0.02 and not pe.get("on"):  # el bloom viejo pasa a la película, solo sobre las luces del fondo
+        pe.update({"on": True, "bloom": float(im["bloom"]), "halacion": 0.0, "grano": 0.0, "desvanecido": 0.0, "calidez": 0.0})
+    im["bloom"] = 0.0
+    fonts = list_fonts()
+    for path in (("font",), ("emphFont",), ("subs", "font"), ("subs", "emphFont")):
+        d = out
+        for key in path[:-1]:
+            d = d[key]
+        if d[path[-1]] and d[path[-1]] not in fonts:
+            d[path[-1]] = fonts[0] if path[-1] == "font" and fonts else ""
+    return out
+
+
+def list_fonts():
+    return sorted(p.name for p in FONTS.glob("*.ttf")) + sorted(p.name for p in FONTS.glob("*.otf"))
+
+
+def probe(video):
+    """Devuelve (ancho, alto, fps, duracion) usando OpenCV."""
+    import cv2
+    cap = cv2.VideoCapture(str(video))
+    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    n = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    cap.release()
+    return w, h, fps, n / fps
+
+
+# ---------------------------------------------------------------- formatos de salida
+# El video se edita en el formato que elijas. Si el original tiene otra proporción, se recorta (nunca se estira).
+FORMATOS = {"9x16": (9, 16), "16x9": (16, 9), "1x1": (1, 1), "4x5": (4, 5)}
+NOMINAL = {"9x16": (1080, 1920), "16x9": (1920, 1080), "1x1": (1080, 1080), "4x5": (1080, 1350)}
+
+
+def formato_auto(w, h):
+    r = w / max(h, 1)
+    return "16x9" if r > 1.2 else "1x1" if r > 0.9 else "9x16"
+
+
+def formato_de(plan, w=None, h=None):
+    f = (plan or {}).get("formato")
+    if f in FORMATOS:
+        return f
+    return formato_auto(w, h) if w and h else "9x16"
+
+
+def encuadre_de(plan):
+    e = (plan or {}).get("encuadre") or {}
+    return min(max(float(e.get("x", 0.5)), 0.0), 1.0), min(max(float(e.get("y", 0.4)), 0.0), 1.0)
+
+
+def cuadro_cover(w, h, f, fx=0.5, fy=0.4):
+    """Recorte (x, y, ancho, alto) de un cuadro w×h con la proporción del formato, el más grande posible."""
+    a, b = FORMATOS[f]
+    asp = a / b
+    if abs(w / h - asp) / asp < 0.02:
+        return 0, 0, w, h
+    if w / h > asp:
+        ch, cw = h, int(round(h * asp))
+    else:
+        cw, ch = w, int(round(w / asp))
+    return int(round(fx * (w - cw))), int(round(fy * (h - ch))), cw, ch
+
+
+def par(n):
+    return max(int(round(n / 2) * 2), 2)
+
+
+def encuadrar(img, f, fx=0.5, fy=0.4):
+    """Recorta una imagen (numpy) a la proporción del formato."""
+    h, w = img.shape[:2]
+    x, y, cw, ch = cuadro_cover(w, h, f, fx, fy)
+    return img if (cw == w and ch == h) else img[y:y + ch, x:x + cw]

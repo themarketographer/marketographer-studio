@@ -1,0 +1,14 @@
+{
+  "nombre": "Storytelling",
+  "icono": "film",
+  "orden": 4,
+  "estado": "proximamente",
+  "descripcion": "Historias narradas con escenas del hombre cabeza de cámara, parallax y una transición.",
+  "pasos": [
+    "El guion trae las dos escenas y el prompt de imagen de cada una.",
+    "Se generan las imágenes y se separan en capas.",
+    "Las capas se mueven a distinta velocidad para dar profundidad y se unen con una transición.",
+    "La narración se sincroniza con las escenas."
+  ],
+  "necesita": "Probar si el parallax hecho con código te convence frente a las capas mágicas de Canva."
+}

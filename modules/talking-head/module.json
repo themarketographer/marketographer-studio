@@ -1,0 +1,7 @@
+{
+  "nombre": "Talking Head",
+  "icono": "video",
+  "orden": 2,
+  "estado": "listo",
+  "descripcion": "Sube un video donde hablas a cámara y el editor propone textos, zooms y sonidos con tu estilo."
+}

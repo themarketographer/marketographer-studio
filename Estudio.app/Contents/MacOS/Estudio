@@ -1,0 +1,54 @@
+#!/bin/bash
+# Abre el Estudio como una app: prende el servidor, abre una ventana propia y lo apaga al cerrarla.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+GUARDA="$HOME/Library/Application Support/EstudioMarketographer"
+mkdir -p "$GUARDA"
+if [ -f "$APP_DIR/server/index.js" ]; then ROOT="$APP_DIR"
+elif [ -f "$GUARDA/ruta" ] && [ -f "$(cat "$GUARDA/ruta")/server/index.js" ]; then ROOT="$(cat "$GUARDA/ruta")"
+else
+  ROOT="$(osascript -e 'POSIX path of (choose folder with prompt "Elige la carpeta marketographer-studio")' 2>/dev/null | sed 's:/$::')"
+  [ -f "$ROOT/server/index.js" ] || exit 1
+fi
+echo "$ROOT" > "$GUARDA/ruta"
+cd "$ROOT" || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  osascript -e 'display dialog "Falta instalar Node.js. Descárgalo en nodejs.org (versión LTS) y vuelve a abrir el Estudio." buttons {"Entendido"}'
+  open "https://nodejs.org"
+  exit 1
+fi
+
+PORT=4177
+URL="http://localhost:$PORT"
+# Si el Estudio ya tiene su ventana abierta, un clic en el Dock solo la trae al frente en vez de abrir otra.
+if pgrep -f "user-data-dir=$GUARDA/ventana" >/dev/null 2>&1; then
+  osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || osascript -e 'tell application "Microsoft Edge" to activate' >/dev/null 2>&1
+  exit 0
+fi
+mkdir -p data
+PROPIO=0
+if ! curl -s -o /dev/null "$URL"; then
+  node server/index.js >> data/estudio.log 2>&1 &
+  SERVER_PID=$!
+  PROPIO=1
+  for i in $(seq 1 40); do curl -s -o /dev/null "$URL" && break; sleep 0.25; done
+fi
+
+apagar() { [ "$PROPIO" = 1 ] && kill "$SERVER_PID" 2>/dev/null; }
+trap apagar EXIT
+
+NAV=""
+for c in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" "/Applications/Chromium.app/Contents/MacOS/Chromium"; do
+  [ -x "$c" ] && NAV="$c" && break
+done
+
+if [ -n "$NAV" ]; then
+  # Ventana propia, sin barra de direcciones ni pestañas. Al cerrarla, termina este comando y se apaga el servidor.
+  "$NAV" --app="$URL" --user-data-dir="$GUARDA/ventana" --window-size=1440,920 --no-first-run --no-default-browser-check >/dev/null 2>&1
+else
+  open "$URL"
+  osascript -e 'display dialog "No encontré Chrome, Edge ni Brave, así que abrí el Estudio en Safari. Para apagarlo, vuelve a este aviso y pulsa Apagar." buttons {"Apagar"} default button "Apagar"' >/dev/null 2>&1
+fi

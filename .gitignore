@@ -1,0 +1,9 @@
+node_modules
+.DS_Store
+.venv/
+data/th/
+data/musica/
+data/estudio.log
+data/
+.claude/
+Estudio.app/Contents/Resources/*.log
