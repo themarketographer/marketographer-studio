@@ -80,6 +80,19 @@ def aplicar(frame_bgr, plan, t, W):
     return cv2.cvtColor((x * 255 + 0.5).astype(np.uint8), cv2.COLOR_RGB2BGR)
 
 
+_TIPO_GPU = {"brightness": 0, "contrast": 1, "grayscale": 2, "sepia": 3, "saturate": 4, "hue-rotate": 5}
+
+
+def ops_gpu(plan, t):
+    """Filtros activos en t para el kernel de la GPU: [(tipo, valor, matriz o None)]. None si alguno (desenfoque) solo lo hace la CPU."""
+    out = []
+    for n, v in ops_activas(plan, t):
+        if n not in _TIPO_GPU:
+            return None
+        out.append((_TIPO_GPU[n], v, None if n in ("brightness", "contrast") else _matriz(n, v)))
+    return out
+
+
 def _prueba():
     rojo = np.zeros((2, 2, 3), np.uint8); rojo[..., 2] = 255  # BGR
     g = aplicar(rojo, {"filtros": [{"id": "x", "filtro": "bn", "k": 1}]}, 0, 1080)

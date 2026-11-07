@@ -12,6 +12,8 @@ import sfx
 import unicodedata
 import graficos as graf
 import filtros
+import gpu
+import os
 
 SIZE_FRAC = {"S": 0.40, "M": 0.60, "L": 0.78, "XL": 0.92}
 SUB_SIZE = {"S": 0.030, "M": 0.038, "L": 0.047, "XL": 0.058}
@@ -430,6 +432,7 @@ def make_look(style, W, H):
     def viñeta(out):
         return cv2.multiply(out, vmask, scale=1 / 255.0) if vmask is not None else out
 
+    apply.vmask, apply.params = vmask, (c, b, sat)
     return apply, viñeta
 
 
@@ -486,6 +489,17 @@ class Pelicula:
         sw, sh = max(W // 8, 8), max(H // 8, 8)  # el brillo es muy suave: a 1/8 se ve igual (PSNR 60 dB) y cuesta 30 % menos
         sm = cv2.resize(f, (sw, sh), interpolation=cv2.INTER_AREA)
         am = cv2.resize(a, (sw, sh), interpolation=cv2.INTER_AREA)
+        glow = self.glow_pequeno(sm, am)
+        # la máscara solo se suaviza un poco: hacerlo a media resolución da lo mismo y cuesta ~4 veces menos
+        libre = cv2.bitwise_not(cv2.resize(cv2.GaussianBlur(cv2.resize(a, (W // 2, H // 2), interpolation=cv2.INTER_AREA), (0, 0), 1.5), (W, H), interpolation=cv2.INTER_LINEAR))
+        # La mezcla "pantalla" se hace en 8 bits y a tamaño completo solo al final: es lo que más pesaba.
+        glow8 = cv2.resize((glow * 255).astype(np.uint8), (W, H), interpolation=cv2.INTER_LINEAR)
+        glow8 = cv2.multiply(glow8, cv2.merge([libre] * 3), scale=1 / 255.0)
+        return 255 - cv2.multiply(255 - f, 255 - glow8, scale=1 / 255.0)
+
+    def glow_pequeno(self, sm, am):
+        """La parte del brillo que se calcula a 1/8 de tamaño (la usan la versión CPU y la de GPU). sm: color reducido (uint8 BGR), am: máscara reducida (uint8). Devuelve el brillo (float 0-1)."""
+        sw, sh = sm.shape[1], sm.shape[0]
         am = cv2.dilate(am, np.ones((5, 5), np.uint8))
         fuera = 1 - am.astype(np.float32) / 255.0
         smf = sm.astype(np.float32) / 255.0
@@ -507,13 +521,7 @@ class Pelicula:
         # velo de difusión: todo el fondo se suaviza un poco y las sombras se levantan
         veil = _suave(smf * fuera[..., None], sw * 0.06) * (self.bloom * 0.4)
         glow = np.clip(glow + veil, 0, 1.5)
-        glow = np.clip(glow, 0, 1)
-        # la máscara solo se suaviza un poco: hacerlo a media resolución da lo mismo y cuesta ~4 veces menos
-        libre = cv2.bitwise_not(cv2.resize(cv2.GaussianBlur(cv2.resize(a, (W // 2, H // 2), interpolation=cv2.INTER_AREA), (0, 0), 1.5), (W, H), interpolation=cv2.INTER_LINEAR))
-        # La mezcla "pantalla" se hace en 8 bits y a tamaño completo solo al final: es lo que más pesaba.
-        glow8 = cv2.resize((glow * 255).astype(np.uint8), (W, H), interpolation=cv2.INTER_LINEAR)
-        glow8 = cv2.multiply(glow8, cv2.merge([libre] * 3), scale=1 / 255.0)
-        return 255 - cv2.multiply(255 - f, 255 - glow8, scale=1 / 255.0)
+        return np.clip(glow, 0, 1)
 
     def global_(self, out, a):
         if not self.on:
@@ -649,9 +657,10 @@ def _acc_previo(segs, facs, k0):
 
 def paralelo(proj, calidad, desde, hasta, total, n, tmp):
     """Reparte los fotogramas en n tramos, cada uno en su propio proceso, y los une sin recodificar."""
-    lim = [round(total * j / n) for j in range(n + 1)]
-    correr_tramos(proj, "render", [f"{lim[j]}:{lim[j + 1]}" for j in range(n)], ["--calidad", calidad, "--desde", str(desde), "--hasta", str(hasta)],
-                  total, lambda h: status(proj, "render", 92 * h / total, f"Fotograma {h} de {total}"), tmp)
+    k = n  # probado: más tramos que procesos (con cola) era más lento, cada proceso nuevo cuesta ~1 s de arranque
+    lim = [round(total * j / k) for j in range(k + 1)]
+    correr_tramos(proj, "render", [f"{lim[j]}:{lim[j + 1]}" for j in range(k)], ["--calidad", calidad, "--desde", str(desde), "--hasta", str(hasta)],
+                  total, lambda h: status(proj, "render", 92 * h / total, f"Fotograma {h} de {total}"), tmp, simultaneos=n)
 
 
 def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, hilos=None):
@@ -693,8 +702,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     tmp = Path(salida) if tramo else proj / "_video.mp4"
     cierre = merge_cierre(plan.get("cierre"))
 
-    def cerrar(extra):
-        final = proj / ("final.mp4" if calidad == "final" and desde == 0 and hasta >= dur - 0.1 else "preview.mp4")
+    def sonidos_de(extra):
         sonidos = []
         if style["sonidos"]:
             sonidos += [(mapa.fuera(e["start"]), e.get("sfx", "none")) for e in events]
@@ -702,15 +710,25 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
                 sonidos += [(mapa.fuera(z["t"]), style["sfxZoom"]) for z in zooms if z["level"] > 1.01 and mapa.vivo(z["t"])]
         if extra and style["sonidos"]:
             sonidos.append((mapa.total, style.get("sfxCierre", "ding")))
-        mux(proj, tmp, final, sonidos, keep, plan, fps, extra)
+        return sonidos
+
+    def cerrar(extra, audio=None):
+        final = proj / ("final.mp4" if calidad == "final" and desde == 0 and hasta >= dur - 0.1 else "preview.mp4")
+        mux(proj, tmp, final, sonidos_de(extra), keep, plan, fps, extra, audio)
         tmp.unlink(missing_ok=True)
         status(proj, "listo", 100, final.name)
         return final
 
     n_h = hilos if hilos is not None else hilos_auto()
     if not tramo and n_h > 1 and total >= 300:  # shortcut: por debajo de ~10 s no vale arrancar procesos; hilos=1 vuelve al modo de un solo proceso
+        extra_p = max(int(round(cierre["dur"] * fps)), 1) / fps if cierre["on"] and hasta >= dur - 0.1 else 0.0
+        res = {}
+        # el audio no depende del video dibujado: se arma mientras los procesos dibujan los cuadros
+        hilo = threading.Thread(target=lambda: res.update(a=audio_final(proj, sonidos_de(extra_p), keep, plan, fps, extra_p)), daemon=True)
+        hilo.start()
         paralelo(proj, calidad, desde, hasta, total, n_h, tmp)
-        return cerrar(max(int(round(cierre["dur"] * fps)), 1) / fps if cierre["on"] and hasta >= dur - 0.1 else 0.0)
+        hilo.join()
+        return cerrar(extra_p, res.get("a"))
     k0, k1 = tramo if tramo else (0, total)
     cap, acap = cv2.VideoCapture(str(src)), cv2.VideoCapture(str(proj / "alpha.mp4"))
     colors = {"accent": hex_rgb(style["accent"]), "text": hex_rgb(style["text"])}
@@ -733,6 +751,19 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     apply_look, apply_vig = make_look(style, W, H)
     peli = Pelicula(style, W, H)
     modo_bl = style.get('fondoModo', 'titulos')
+    G = None
+    if gpu.disponible() and not os.environ.get("ESTUDIO_CPU"):  # dibujo en la GPU; ESTUDIO_CPU=1 fuerza el camino de CPU
+        try:
+            def mapa_bordes():
+                yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+                rr = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H * 0.45) / (H * 0.55)) ** 2)
+                return np.clip((rr - 0.55) / 0.6, 0, 1).astype(np.float32)
+            G = gpu.Gpu(W, H, peli, apply_look.params, apply_look.vmask, modo_bl, mapa_bordes)
+            if not G.ok:
+                G = None
+        except Exception as e_gpu:
+            print(f"GPU no disponible, se usa la CPU: {e_gpu}", flush=True)
+            G = None
     bl_edge = None
     bl_pesos = None
     blur_w = clamp(float(style["desenfoque"]))
@@ -764,34 +795,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             break
         f, a, fi, si = item
         t = fi / fps
-        f = apply_look(f)
-        f = filtros.aplicar(f, plan, t, W)
         s = escala(t, si)
-        if s > 1.001:
-            M = np.float32([[s, 0, cx_z * (1 - s)], [0, s, cy_z * (1 - s)]])
-            f = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-            a = cv2.warpAffine(a, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-        f = peli.fondo(f, a)
-        if mb > 0.02:  # estela horizontal del fondo: siempre (con un vaivén suave) o solo mientras el zoom se mueve
-            vel = abs(s - s_prev) * fps
-            siempre = style.get("motionBlurModo", "zoom") == "siempre"
-            base = (0.55 + 0.25 * math.sin(t * 1.9)) if siempre else 0.0
-            fuerza = max(min(vel * 3, 1.0) if vel > 0.05 else 0.0, base)
-            if fuerza > 0.02:
-                k = int(3 + (min(vel, 1.2) * 14 + (18 * base if siempre else 0)) * mb * 1.3) | 1
-                est = cv2.blur(f, (k, 1))
-                if "edge_mask" not in locals():
-                    xx = np.abs(np.linspace(-1, 1, W, dtype=np.float32))[None, :]
-                    edge_mask = np.repeat(np.clip((xx - 0.12) / 0.6, 0, 1)[..., None], 3, axis=2).repeat(H, axis=0)
-                m_ = (np.ones_like(edge_mask) * 0.85 + edge_mask * 0.15) if siempre else edge_mask
-                w_ = np.clip(m_ * fuerza * min(mb * 1.6, 1.0), 0, 1)
-                if style.get("motionBlurSobre", "fondo") == "fondo":  # la estela solo en el fondo: tú sales nítido
-                    w_ = w_ * (1 - a[..., None].astype(np.float32) / 255.0)
-                f = (f * (1 - w_) + est * w_).astype(np.uint8)
-        s_prev = s
-        if style["zoomBN"] and s > 1.03:
-            wbn = clamp((s - 1.03) / 0.05)
-            f = cv2.addWeighted(f, 1 - wbn, cv2.cvtColor(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR), wbn, 0)
         active = [e for e in events if e["start"] - 0.02 <= t < e["end"]]
         back = [e for e in active if e.get("pos") in DETRAS]
         front = [e for e in active if e.get("pos") not in DETRAS]
@@ -799,7 +803,6 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
         for e in events:
             if e.get("pos") in DETRAS:
                 k = max(k, clamp((t - e["start"]) / 0.18) * clamp((e["end"] + 0.1 - t) / 0.2))
-        layer = f
         if modo_bl == "siempre" and blur_w > 0:
             w_, osc = blur_w, 0.9
         elif modo_bl == "bordes" and blur_w > 0:
@@ -808,30 +811,74 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             w_, osc = k * blur_w, 0.5
         else:
             w_, osc = 0.0, 0.5
-        if w_ > 0.01:
-            small = cv2.GaussianBlur(cv2.resize(f, (max(W // 6, 8), max(H // 6, 8)), interpolation=cv2.INTER_AREA), (0, 0), 4.2)
-            bl = cv2.convertScaleAbs(cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR), alpha=osc)
-            if modo_bl == "bordes":
-                if bl_edge is None:
-                    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-                    rr = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H * 0.45) / (H * 0.55)) ** 2)
-                    bl_edge = np.clip((rr - 0.55) / 0.6, 0, 1).astype(np.float32)
-                if bl_pesos is None or bl_pesos[0] != w_:  # w_ no cambia en este modo: los pesos se calculan una sola vez
-                    bl_pesos = (w_, 1 - bl_edge * w_, bl_edge * w_)
-                layer = cv2.blendLinear(f, bl, bl_pesos[1], bl_pesos[2])
+        ops = filtros.ops_gpu(plan, t) if G is not None else None
+        usa_cpu = G is None or ops is None or (style["zoomBN"] and s > 1.03)
+        if not usa_cpu and mb > 0.02:  # la estela de movimiento no está en la GPU: esos cuadros van por CPU
+            vel_ = abs(s - s_prev) * fps
+            base_ = (0.55 + 0.25 * math.sin(t * 1.9)) if style.get("motionBlurModo", "zoom") == "siempre" else 0.0
+            usa_cpu = max(min(vel_ * 3, 1.0) if vel_ > 0.05 else 0.0, base_) > 0.02
+        out = None
+        if not usa_cpu:
+            def pon_detras(layer, back=back, t=t):  # los textos "detrás de ti" se dibujan sobre el fondo, en CPU
+                layer = layer.copy()
+                for e in back:
+                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
+                return layer
+            out = G.frame(f, a, s, cx_z, cy_z, ops, w_, osc, pon_detras if back else None)
+        if out is None:
+            f = apply_look(f)
+            f = filtros.aplicar(f, plan, t, W)
+            if s > 1.001:
+                M = np.float32([[s, 0, cx_z * (1 - s)], [0, s, cy_z * (1 - s)]])
+                f = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+                a = cv2.warpAffine(a, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            f = peli.fondo(f, a)
+            if mb > 0.02:  # estela horizontal del fondo: siempre (con un vaivén suave) o solo mientras el zoom se mueve
+                vel = abs(s - s_prev) * fps
+                siempre = style.get("motionBlurModo", "zoom") == "siempre"
+                base = (0.55 + 0.25 * math.sin(t * 1.9)) if siempre else 0.0
+                fuerza = max(min(vel * 3, 1.0) if vel > 0.05 else 0.0, base)
+                if fuerza > 0.02:
+                    k = int(3 + (min(vel, 1.2) * 14 + (18 * base if siempre else 0)) * mb * 1.3) | 1
+                    est = cv2.blur(f, (k, 1))
+                    if "edge_mask" not in locals():
+                        xx = np.abs(np.linspace(-1, 1, W, dtype=np.float32))[None, :]
+                        edge_mask = np.repeat(np.clip((xx - 0.12) / 0.6, 0, 1)[..., None], 3, axis=2).repeat(H, axis=0)
+                    m_ = (np.ones_like(edge_mask) * 0.85 + edge_mask * 0.15) if siempre else edge_mask
+                    wm_ = np.clip(m_ * fuerza * min(mb * 1.6, 1.0), 0, 1)
+                    if style.get("motionBlurSobre", "fondo") == "fondo":  # la estela solo en el fondo: tú sales nítido
+                        wm_ = wm_ * (1 - a[..., None].astype(np.float32) / 255.0)
+                    f = (f * (1 - wm_) + est * wm_).astype(np.uint8)
+            s_prev = s
+            if style["zoomBN"] and s > 1.03:
+                wbn = clamp((s - 1.03) / 0.05)
+                f = cv2.addWeighted(f, 1 - wbn, cv2.cvtColor(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR), wbn, 0)
+            layer = f
+            if w_ > 0.01:
+                small = cv2.GaussianBlur(cv2.resize(f, (max(W // 6, 8), max(H // 6, 8)), interpolation=cv2.INTER_AREA), (0, 0), 4.2)
+                bl = cv2.convertScaleAbs(cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR), alpha=osc)
+                if modo_bl == "bordes":
+                    if bl_edge is None:
+                        yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+                        rr = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H * 0.45) / (H * 0.55)) ** 2)
+                        bl_edge = np.clip((rr - 0.55) / 0.6, 0, 1).astype(np.float32)
+                    if bl_pesos is None or bl_pesos[0] != w_:  # w_ no cambia en este modo: los pesos se calculan una sola vez
+                        bl_pesos = (w_, 1 - bl_edge * w_, bl_edge * w_)
+                    layer = cv2.blendLinear(f, bl, bl_pesos[1], bl_pesos[2])
+                else:
+                    layer = cv2.addWeighted(f, 1 - w_, bl, w_, 0)
+            if back:
+                layer = layer.copy()
+                for e in back:
+                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
+            if layer is f:  # sin desenfoque ni textos detrás de ti, f y layer son iguales: mezclarlos no cambia nada
+                out = f
             else:
-                layer = cv2.addWeighted(f, 1 - w_, bl, w_, 0)
-        if back:
-            layer = layer.copy()
-            for e in back:
-                con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
-        if layer is f:  # sin desenfoque ni textos detrás de ti, f y layer son iguales: mezclarlos no cambia nada
-            out = f
-        else:
-            a3 = cv2.merge([a, a, a])
-            out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
-        out = peli.global_(out, a)
-        out = apply_vig(out)
+                a3 = cv2.merge([a, a, a])
+                out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
+            out = peli.global_(out, a)
+            out = apply_vig(out)
+        s_prev = s
         for e in sorted(front, key=lambda x: x.get("kind") != "seccion"):  # el velo de una sección va debajo de lo demás
             if e.get("kind") == "punto":
                 continue
@@ -1050,7 +1097,7 @@ def audio_original(proj):
     return np.frombuffer(raw, np.float32).reshape(-1, 2).copy()
 
 
-def mux(proj, video, out, sonidos, keep, plan, fps, extra=0.0):
+def audio_final(proj, sonidos, keep, plan, fps, extra=0.0):
     """Arma el audio: voz de los tramos que se quedan (con fundidos en cada unión), mejoras, música y efectos."""
     full = audio_original(proj)
     sr = sfx.SR
@@ -1093,7 +1140,14 @@ def mux(proj, video, out, sonidos, keep, plan, fps, extra=0.0):
             continue
         seg = snd[: len(audio) - i0] * gain
         audio[i0:i0 + len(seg)] += seg[:, None]
-    audio = np.clip(audio, -1, 1)
+    return np.clip(audio, -1, 1)
+
+
+def mux(proj, video, out, sonidos, keep, plan, fps, extra=0.0, audio=None):
+    """Une el video ya dibujado con el audio (se puede pasar el audio ya armado para no esperarlo)."""
+    if audio is None:
+        audio = audio_final(proj, sonidos, keep, plan, fps, extra)
+    sr = sfx.SR
     subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(video), "-f", "f32le", "-ar", str(sr), "-ac", "2", "-i", "-",
                     "-af", "alimiter=limit=0.97", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out)],
                    input=audio.tobytes(), check=True)

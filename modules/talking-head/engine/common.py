@@ -43,15 +43,24 @@ def hilos_auto():
     return int(os.environ.get("HILOS") or max(min((os.cpu_count() or 2) - 1, 6), 1))
 
 
-def correr_tramos(proj, accion, tramos, extra, total, avance, destino):
+def correr_tramos(proj, accion, tramos, extra, total, avance, destino, simultaneos=None):
     """Un proceso del motor por tramo (cli.py <accion> --tramo a:b --salida parte): espera mostrando avance(hecho) y une las partes sin recodificar."""
     proj = Path(proj)
     partes = [proj / f"_{accion}{j}.mp4" for j in range(len(tramos))]
     lista = proj / f"_{accion}.txt"
-    procs = [subprocess.Popen([sys.executable, str(ENGINE / "cli.py"), accion, str(proj), *extra, "--tramo", t, "--salida", str(parte)])
-             for t, parte in zip(tramos, partes)]
+    simultaneos = simultaneos or len(tramos)  # con más tramos que procesos, cada proceso que termina toma el siguiente: el trabajo se reparte parejo
+    procs, pendientes = [], list(zip(tramos, partes))
     try:
-        while any(pr.poll() is None for pr in procs):
+        while True:
+            vivos = sum(1 for pr in procs if pr.poll() is None)
+            while pendientes and vivos < simultaneos:
+                t, parte = pendientes.pop(0)
+                procs.append(subprocess.Popen([sys.executable, str(ENGINE / "cli.py"), accion, str(proj), *extra, "--tramo", t, "--salida", str(parte)]))
+                vivos += 1
+            if not pendientes and vivos == 0:
+                break
+            if any(pr.poll() not in (None, 0) for pr in procs):
+                break  # uno falló: no tiene sentido seguir con los demás
             hecho = 0
             for parte in partes:
                 try:
@@ -59,8 +68,8 @@ def correr_tramos(proj, accion, tramos, extra, total, avance, destino):
                 except (OSError, ValueError):
                     pass
             avance(min(hecho, total))
-            time.sleep(1)
-        if any(pr.returncode for pr in procs):
+            time.sleep(0.25)
+        if pendientes or any(pr.returncode for pr in procs):
             raise RuntimeError(f"Falló uno de los tramos ({accion}).")
         lista.write_text("".join(f"file '{parte}'\n" for parte in partes))
         subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lista), "-c", "copy", str(destino)], check=True)
