@@ -818,7 +818,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
         if back:
             layer = layer.copy()
             for e in back:
-                draw_event(layer, sprites[e["id"]], e, t, W, H)
+                con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
         a3 = cv2.merge([a, a, a])
         out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
         out = peli.global_(out, a)
@@ -827,9 +827,9 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             if e.get("kind") == "punto":
                 continue
             if e.get("kind") in graf.TIPOS:
-                graf.dibujar(out, e, sprites[e["id"]], t, W, H, colors)
+                con_opacidad(out, e, lambda e=e: graf.dibujar(out, e, sprites[e["id"]], t, W, H, colors))
             else:
-                draw_event(out, sprites[e["id"]], e, t, W, H)
+                con_opacidad(out, e, lambda e=e: draw_event(out, sprites[e["id"]], e, t, W, H))
         if chunks:
             while ci < len(chunks) - 1 and chunks[ci]["end"] <= t:
                 ci += 1
@@ -952,6 +952,16 @@ def evitar_solapes(events, sprites, style, H):
                     e["y"] = round(it["c"] - it["off"], 4)
         placed.append(it)
 
+
+
+def con_opacidad(dst, e, fn):
+    # opacidad del evento (0-1): se dibuja normal y se mezcla con lo que había debajo
+    o = min(max(float(e.get("opacidad", 1)), 0.0), 1.0)
+    if o >= 0.999:
+        return fn()
+    base = dst.copy()
+    fn()
+    dst[:] = (base.astype(np.float32) * (1 - o) + dst.astype(np.float32) * o).astype(np.uint8)
 
 
 def draw_event(dst, spr, e, t, W, H):

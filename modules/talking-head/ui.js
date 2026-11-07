@@ -2,6 +2,7 @@
 import { hojaExportar } from './exportar-ui.js';
 import { crearMedidor } from './meter.js';
 import { crearTimeline } from './timeline.js';
+import { cuerpoPropiedades } from './inspector.js';
 const POS = [['detras', 'Detrás de ti'], ['arriba', 'Arriba'], ['centro', 'Centro'], ['abajo', 'Abajo']];
 const TAM = [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];
 const ANIM = [['pop', 'Rebote corto'], ['elastico', 'Elástico'], ['ruleta', 'Ruleta'], ['deslizar', 'Sube'], ['escribir', 'Se escribe'], ['fade', 'Aparece'], ['bajar', 'Baja'], ['crecer', 'Crece'], ['rebote', 'Rebote largo'], ['tiembla', 'Tiembla']];
@@ -763,7 +764,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t) });
+      timeline = crearTimeline({ h, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t), onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
@@ -918,6 +919,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     sonidos: ['Efectos de sonido', 'Qué suena en cada título, zoom y cierre, y tus propios sonidos.', () => panelSonidos()],
     cierre: ['Tarjeta final', 'El cierre con tu llamado a la acción.', () => panelCierre()],
     publicar: ['Portada y caption', 'Todo lo que necesitas para publicar.', () => panelPublicar()],
+    propiedades: ['Propiedades', 'Los ajustes de lo que elegiste en la línea de tiempo.', () => cuerpoPropiedades(S.selTL, { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, abrirTitulo: (id) => S.abiertos.add(id) })],
     exportar: ['Exportar', 'Elige para dónde es el video. Se arma una vez y sale en todos los formatos que quieras.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
     ajustes: ['Ajustes', 'Se guardan en este navegador y valen para todos tus videos.', () => panelAjustes()],
   };
@@ -956,7 +958,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       nav, panelEl, h('p', { class: 'hint hoja-foot' }, S.panel === 'ajustes' ? 'Se guarda solo, en este navegador.' : 'Se guarda solo. Los cambios ya se ven en el video.'));
     root.append(fondo, hoja);
     document.querySelector('.ed')?.classList.add('con-hoja');
-    cerrar.focus();
+    if (S.panel !== 'propiedades') cerrar.focus();
     pintarPanel();
   }
   function pintarPanel() {

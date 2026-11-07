@@ -158,6 +158,15 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   // Ruleta: tiempos en segundos; rebote y desenfoque son fracciones de una línea.
   const RULETA = { POR_PALABRA: 0.14, BASE: 0.25, REBOTE: 0.04, ASENTAR: 0.18, DESENFOQUE: 0.10 };
 
+  // Opacidad del evento (ev.opacidad, 0-1): el código de dibujo fija globalAlpha a su manera, así que se intercepta el ajuste y se multiplica.
+  function conOp(c, e, fn) {
+    const o = Math.min(Math.max(Number(e.opacidad ?? 1), 0), 1);
+    if (o >= 0.999) return fn();
+    const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'globalAlpha');
+    d.set.call(c, d.get.call(c) * o);
+    Object.defineProperty(c, 'globalAlpha', { configurable: true, get() { return d.get.call(c) / o; }, set(v) { d.set.call(c, v * o); } });
+    try { fn(); } finally { const a = d.get.call(c) / o; delete c.globalAlpha; d.set.call(c, a); }
+  }
   function dibujarTitulo(c, ev, t, st) {
     const a = animState(ev, t);
     if (a.alpha <= 0.01) return;
@@ -818,7 +827,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
         ectx.globalAlpha = 1; ectx.globalCompositeOperation = 'destination-in'; ectx.fillStyle = g; ectx.fillRect(0, 0, W, H); ectx.restore();
         lctx.save(); lctx.globalAlpha = clamp(fuerzaMb * Math.min(mb * 1.6, 1)); lctx.drawImage(edgeC, 0, 0); lctx.restore();
       }
-      back.forEach((e) => dibujarTitulo(lctx, e, t, st));
+      back.forEach((e) => conOp(lctx, e, () => dibujarTitulo(lctx, e, t, st)));
       recortar(s);
       ctx.drawImage(layerC, 0, 0); ctx.drawImage(subjC, 0, 0);
     } else {
@@ -829,7 +838,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       if (pel.sobreMi === false && conMatte) ctx.drawImage(subjC, 0, 0);
     }
     viñeta(ctx, st);
-    front.filter((e) => e.kind !== 'punto').forEach((e) => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st)));
+    front.filter((e) => e.kind !== 'punto').forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
     dibujarSubs(ctx, t, st, events, 0);
     front.filter((e) => e.kind === 'punto').forEach((e) => dibujarKind(ctx, e, t, st));
     ctx.restore();
