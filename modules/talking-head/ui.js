@@ -1,6 +1,7 @@
 // Editor de Talking Head: sube un video, el motor propone títulos, subtítulos, zooms y sonidos, y tú ajustas con controles simples.
 import { hojaExportar } from './exportar-ui.js';
 import { crearMedidor } from './meter.js';
+import { crearTimeline } from './timeline.js';
 const POS = [['detras', 'Detrás de ti'], ['arriba', 'Arriba'], ['centro', 'Centro'], ['abajo', 'Abajo']];
 const TAM = [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];
 const ANIM = [['pop', 'Rebote corto'], ['elastico', 'Elástico'], ['ruleta', 'Ruleta'], ['deslizar', 'Sube'], ['escribir', 'Se escribe'], ['fade', 'Aparece'], ['bajar', 'Baja'], ['crecer', 'Crece'], ['rebote', 'Rebote largo'], ['tiembla', 'Tiembla']];
@@ -232,7 +233,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   const A = '/talking-head';
   const S = { fuentes: [], motorListo: true, proyectos: [], p: null, tab: 'source', panel: null, poll: null, guardar: null, bust: Date.now(),
     dirty: false, sel: new Set(), abiertos: new Set(), zona: 'none', guion: null };
-  let video = null, panelEl = null, live = null, medidor = null, inlineEl = null, lineaEl = null, histTimer = null, tlTimer = null;
+  let video = null, panelEl = null, live = null, medidor = null, timeline = null, inlineEl = null, lineaEl = null, histTimer = null, tlTimer = null;
   S.aj = leerAjustes(); S.paso = 'recorte'; S.inline = null;
   try { S.vista = localStorage.getItem('estudio.vista') || 'normal'; } catch { S.vista = 'normal'; }
   const Hist = { pila: [], i: -1, ultimo: '' };
@@ -655,7 +656,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         h('button', { class: 'btn gold', onclick: () => lanzar('analizar', {}), html: icon('play') + ' Analizar video' })));
     }
     root.style.setProperty('--asp', FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']);
-    root.replaceChildren(cab, titulo, h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') }, columnaVideo(), colSet()));
+    root.replaceChildren(cab, titulo, h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null));
     decorar(root);
     if (S.panel) montarHoja();
   }
@@ -749,6 +750,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (S.tab === 'live' && !(p.plan && p.tieneAlpha)) S.tab = 'source';
     if (live) { live.destroy(); live = null; }
     if (medidor) { medidor.destroy(); medidor = null; }
+    if (timeline) { timeline.destroy(); timeline = null; }
     let pantalla;
     if (S.tab === 'live') {
       live = crearLive({ onEdit: () => cambio(), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}` });
@@ -760,6 +762,10 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const phone = h('div', { class: 'phone' + (fmP === '16x9' ? ' ancho' : ''), style: fmP ? `aspect-ratio: ${FMT_ASP[fmP]}` : '' }, pantalla, zonaSegura(fmP && fmP !== '9x16' ? 'none' : S.zona));
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
+    if (S.tab === 'live') {
+      timeline = crearTimeline({ h, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t) });
+      if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
+    }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
     lineaEl = S.tab === 'live' ? h('div', { class: 'ltime', role: 'slider', 'aria-label': 'Línea de tiempo del video', tabindex: '0',
       onpointerdown: (e) => { const mover = (ev) => { const r = lineaEl.getBoundingClientRect(); const t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * plan().duration; if (live) live.ir(t); pintarCabeza(); }; mover(e); lineaEl.setPointerCapture(e.pointerId); lineaEl.onpointermove = mover; lineaEl.onpointerup = () => { lineaEl.onpointermove = null; }; } }) : null;
@@ -788,6 +794,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
   // ---------- línea de tiempo: títulos, zooms, cámara lenta y cortes de un vistazo ----------
   function pintarLinea() {
+    if (timeline) timeline.pintar();
     if (!lineaEl || !lineaEl.isConnected || !S.p || !S.p.plan) return;
     const P = plan(), d = P.duration || 1, pc = (t) => `${(Math.max(0, Math.min(d, t)) / d) * 100}%`;
     const marca = (cls, a, b, tt) => h('i', { class: cls, title: tt, style: `left:${pc(a)};width:${b == null ? '2px' : `calc(${pc(b)} - ${pc(a)})`}` });

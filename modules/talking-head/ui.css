@@ -469,3 +469,35 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .med-txt { margin: 4px 0 0; font-size: 10px; line-height: 1.3; color: var(--ink); font-variant-numeric: tabular-nums; }
 .medidor .hint { font-size: 9px; margin: 2px 0 0; }
 @media (max-width: 900px) { .medidor { display: none; } }
+
+/* ---------- línea de tiempo con pistas ---------- */
+.ed > .lt { grid-column: 1 / -1; position: sticky; bottom: 8px; z-index: 20; box-shadow: 0 -6px 20px rgba(0,0,0,.12); }
+.ed:has(.lt.abierto) .ltime { display: none; }
+.lt { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-200); outline: none; position: relative; font-size: 11px; }
+.lt:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.lt-barra { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; }
+.lt-barra .btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.lt-abrir::before { content: 'Línea de tiempo ▸'; } .lt.abierto .lt-abrir::before { content: 'Línea de tiempo ▾'; }
+.lt-t { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lt-acc { display: inline-flex; gap: 6px; align-items: center; } .lt-nota-t { color: var(--muted); }
+.lt-cuerpo { display: none; grid-template-columns: 64px 1fr; } .lt.abierto .lt-cuerpo { display: grid; }
+.lt-etq { position: relative; } .lt-etq span { position: absolute; left: 8px; display: flex; align-items: center; color: var(--muted); }
+.lt-scroll { overflow-x: auto; overflow-y: hidden; position: relative; border-left: 1px solid var(--border); }
+.lt-inner { position: relative; cursor: crosshair; touch-action: none; user-select: none; }
+.lt-fila { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); pointer-events: none; }
+.lt-marca { position: absolute; top: 0; height: 22px; border-left: 1px solid var(--border); pointer-events: none; font-style: normal; } .lt-marca span { margin-left: 3px; color: var(--muted); }
+.lt-b { position: absolute; box-sizing: border-box; border-radius: 6px; overflow: hidden; white-space: nowrap; padding: 0 5px; display: flex; align-items: center; cursor: grab; font-size: 11px; color: #181818; }
+.lt-b.sel { outline: 2px solid var(--ink); z-index: 2; }
+.lt-tit { background: var(--accent); } .lt-esp { background: #b78cff; } .lt-lento { background: var(--ok); color: #fff; }
+.lt-zoom { background: #3cd7ff; min-width: 12px; width: 12px !important; margin-left: -6px; transform: rotate(45deg) scale(.6); border-radius: 3px; padding: 0; }
+.lt-nota { position: absolute; font-style: normal; color: var(--ink); pointer-events: none; }
+.lt-musica { position: absolute; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--ok) 50%, transparent); font-size: 8px; line-height: 8px; text-align: center; pointer-events: none; font-style: normal; }
+.lt-onda { position: absolute; pointer-events: none; }
+.lt-pal { position: absolute; top: 90px; height: 14px; overflow: hidden; white-space: nowrap; font-size: 10px; color: var(--ink); pointer-events: none; text-align: center; }
+.lt-corte { position: absolute; top: 22px; bottom: 0; pointer-events: none; background: color-mix(in srgb, var(--neg) 35%, transparent); background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.3) 0 3px, transparent 3px 6px); }
+.lt-corte.auto { opacity: .6; } .lt-corte.sel { outline: 2px solid var(--neg); }
+.lt-rango { position: absolute; top: 90px; height: 56px; background: rgba(60,215,255,.3); border: 1px solid #3cd7ff; pointer-events: none; }
+.lt-guia { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); pointer-events: none; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.lt-cabeza { position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: var(--ink); pointer-events: none; z-index: 3; }
+.lt-tip { position: absolute; background: var(--ink); color: var(--surface-200); padding: 3px 7px; border-radius: 6px; pointer-events: none; z-index: 5; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .ed > .lt { display: none; } .ed:has(.lt.abierto) .ltime { display: block; } }
