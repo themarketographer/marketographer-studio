@@ -38,21 +38,37 @@ def run(proj, long_side=960, ratio=0.4, base=50, span=45, hilos=None, tramo=None
     enc = subprocess.Popen([ffmpeg_exe(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{w}x{h}", "-r", f"{fps}",
                             "-i", "-", *encoder_args("final", 85), "-pix_fmt", "yuv420p", str(out)],
                            stdin=subprocess.PIPE)
-    while k1 is None or n < k1:
+    # Solo se recorta un cuadro de cada dos (el modelo es el cuello de botella); el cuadro intermedio es el promedio de sus vecinos.
+    prev, odd_pend = None, False
+    esc = lambda m: (np.clip(m, 0, 1) * 255).astype(np.uint8)
+    while k1 is None or n <= k1:
+        if n % 2:
+            if not cap.grab():
+                break
+            odd_pend = True
+            n += 1
+            continue
         ok, f = cap.read()
         if not ok:
             break
         f = cv2.resize(f, (w, h), interpolation=cv2.INTER_AREA)
         x = cv2.cvtColor(f, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1)[None] / 255
         _, pha, *rec = sess.run(None, dict(src=x, r1i=rec[0], r2i=rec[1], r3i=rec[2], r4i=rec[3], downsample_ratio=dr))
-        if n >= k0:
-            enc.stdin.write((np.clip(pha[0, 0], 0, 1) * 255).astype(np.uint8).tobytes())
+        m = pha[0, 0]
+        if odd_pend and prev is not None and k0 <= n - 1 < (k1 if k1 is not None else n):
+            enc.stdin.write(esc((prev + m) / 2).tobytes())
+        odd_pend = False
+        if k0 <= n and (k1 is None or n < k1):
+            enc.stdin.write(esc(m).tobytes())
+        prev = m
         n += 1
-        if n % 15 == 0:
+        if n % 16 == 1:  # n ya avanzó un cuadro tras uno par
             if tramo:
                 Path(str(out) + ".prog").write_text(str(max(n - k0, 0)))
             else:
                 status(proj, "recortar", base + span * n / max(total, 1), f"Fotograma {n} de {total}")
+    if odd_pend and prev is not None and n - 1 >= k0 and (k1 is None or n - 1 < k1):  # último cuadro impar: no tiene vecino siguiente
+        enc.stdin.write(esc(prev).tobytes())
     cap.release()
     enc.stdin.close()
     enc.wait()

@@ -3,7 +3,7 @@
 const R2 = (n) => Math.round(n * 100) / 100;
 const mmss = (t, c) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}${c ? '.' + String(Math.floor((t % 1) * 100)).padStart(2, '0') : ''}`;
 const PISTAS = [['textos', 'Textos', 22, 32], ['elem', 'Elementos', 56, 32], ['voz', 'Voz', 90, 56], ['cam', 'Cámara', 148, 32], ['fil', 'Filtros', 182, 32], ['son', 'Sonido', 216, 32]];
-const ALTO = 250, MIN_PXS = 10, MAX_PXS = 400, MIN_DUR = 0.2;
+const ALTO = 250, MIN_PXS = 1, MAX_PXS = 400, MIN_DUR = 0.2;
 
 // Pega t al punto más cercano (lista ordenada) si está a menos de tol segundos; si no, devuelve t.
 export function imanar(t, puntos, tol) {
@@ -71,7 +71,7 @@ export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, get
     if (ajustar) pxs = Math.max(MIN_PXS, Math.min(MAX_PXS, w / d));
     inner.style.width = `${xDe(d)}px`; inner.style.height = `${ALTO}px`; etiquetas.style.height = `${ALTO}px`;
     const kids = [];
-    const paso = pxs >= 60 ? 1 : pxs >= 15 ? 5 : 10;
+    const paso = pxs >= 60 ? 1 : pxs >= 15 ? 5 : pxs >= 6 ? 10 : 30;
     for (let t = 0; t <= d; t += paso) kids.push(h('i', { class: 'lt-marca', style: `left:${xDe(t)}px` }, h('span', {}, mmss(t))));
     PISTAS.forEach(([, , y, a]) => kids.push(h('div', { class: 'lt-fila', style: `top:${y}px;height:${a}px` })));
     const nm = (e) => (e.text || '').replace(/\*/g, '');

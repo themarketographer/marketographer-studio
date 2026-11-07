@@ -161,7 +161,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   // Opacidad del evento (ev.opacidad, 0-1): el código de dibujo fija globalAlpha a su manera, así que se intercepta el ajuste y se multiplica.
   function conOp(c, e, fn) {
     const o = Math.min(Math.max(Number(e.opacidad ?? 1), 0), 1);
-    if (o >= 0.999) return fn();
+    if (!(o < 0.999)) return fn();  // opacidad completa o valor inválido (NaN): se dibuja normal
     const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'globalAlpha');
     d.set.call(c, d.get.call(c) * o);
     Object.defineProperty(c, 'globalAlpha', { configurable: true, get() { return d.get.call(c) / o; }, set(v) { d.set.call(c, v * o); } });

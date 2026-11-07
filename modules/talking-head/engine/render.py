@@ -508,7 +508,8 @@ class Pelicula:
         veil = _suave(smf * fuera[..., None], sw * 0.06) * (self.bloom * 0.4)
         glow = np.clip(glow + veil, 0, 1.5)
         glow = np.clip(glow, 0, 1)
-        libre = 255 - _suave(a, 3.0)
+        # la máscara solo se suaviza un poco: hacerlo a media resolución da lo mismo y cuesta ~4 veces menos
+        libre = cv2.bitwise_not(cv2.resize(cv2.GaussianBlur(cv2.resize(a, (W // 2, H // 2), interpolation=cv2.INTER_AREA), (0, 0), 1.5), (W, H), interpolation=cv2.INTER_LINEAR))
         # La mezcla "pantalla" se hace en 8 bits y a tamaño completo solo al final: es lo que más pesaba.
         glow8 = cv2.resize((glow * 255).astype(np.uint8), (W, H), interpolation=cv2.INTER_LINEAR)
         glow8 = cv2.multiply(glow8, cv2.merge([libre] * 3), scale=1 / 255.0)
@@ -733,6 +734,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     peli = Pelicula(style, W, H)
     modo_bl = style.get('fondoModo', 'titulos')
     bl_edge = None
+    bl_pesos = None
     blur_w = clamp(float(style["desenfoque"]))
     zoom_alt = bool(cortes.get("on") and cortes.get("zoomAlterna"))
     enc = subprocess.Popen([ffmpeg_exe(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-r", f"{fps}", "-i", "-",
@@ -813,16 +815,21 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
                 if bl_edge is None:
                     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
                     rr = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H * 0.45) / (H * 0.55)) ** 2)
-                    bl_edge = np.clip((rr - 0.55) / 0.6, 0, 1)[..., None].astype(np.float32)
-                layer = (f * (1 - bl_edge * w_) + bl * (bl_edge * w_)).astype(np.uint8)
+                    bl_edge = np.clip((rr - 0.55) / 0.6, 0, 1).astype(np.float32)
+                if bl_pesos is None or bl_pesos[0] != w_:  # w_ no cambia en este modo: los pesos se calculan una sola vez
+                    bl_pesos = (w_, 1 - bl_edge * w_, bl_edge * w_)
+                layer = cv2.blendLinear(f, bl, bl_pesos[1], bl_pesos[2])
             else:
                 layer = cv2.addWeighted(f, 1 - w_, bl, w_, 0)
         if back:
             layer = layer.copy()
             for e in back:
                 con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
-        a3 = cv2.merge([a, a, a])
-        out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
+        if layer is f:  # sin desenfoque ni textos detrás de ti, f y layer son iguales: mezclarlos no cambia nada
+            out = f
+        else:
+            a3 = cv2.merge([a, a, a])
+            out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
         out = peli.global_(out, a)
         out = apply_vig(out)
         for e in front:
@@ -958,7 +965,12 @@ def evitar_solapes(events, sprites, style, H):
 
 def con_opacidad(dst, e, fn):
     # opacidad del evento (0-1): se dibuja normal y se mezcla con lo que había debajo
-    o = min(max(float(e.get("opacidad", 1)), 0.0), 1.0)
+    try:
+        o = min(max(float(e.get("opacidad", 1)), 0.0), 1.0)
+    except (TypeError, ValueError):
+        o = 1.0
+    if o != o:  # NaN
+        o = 1.0
     if o >= 0.999:
         return fn()
     base = dst.copy()
