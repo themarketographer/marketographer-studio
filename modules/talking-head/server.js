@@ -276,6 +276,23 @@ export default async function register({ route, config }) {
     if (body.hasta != null) a.push('--hasta', String(Number(body.hasta)));
     lanzar(params.id, a);
   });
+  // Exportar con presets (una pasada de ffmpeg sobre final.mp4)
+  route.get('/presets-export', () => readJson(engine, 'presets_export.json', { presets: [] }));
+  route.post('/proyectos/:id/exportar', ({ params, body }) => {
+    const ids = readJson(engine, 'presets_export.json', { presets: [] }).presets.map((p) => p.id);
+    const pid = body.preset === 'custom' ? 'custom' : ids.includes(body.preset) ? body.preset : null;
+    if (!pid) throw new Error('Ajuste no válido');
+    lanzar(params.id, ['exportar', '--preset', pid, ...(pid === 'custom' ? ['--custom', JSON.stringify(body.custom || {})] : [])]);
+  });
+  route.get('/proyectos/:id/exportados', ({ params }) => {
+    const d = path.join(dir(params.id), 'export'), med = readJson(d, 'medidas.json', {});
+    if (!fs.existsSync(d)) return [];
+    return fs.readdirSync(d).filter((f) => f !== 'medidas.json').map((nombre) => ({ nombre, mb: +(fs.statSync(path.join(d, nombre)).size / 1048576).toFixed(1), ...(med[nombre] || {}) }));
+  });
+  route.get('/proyectos/:id/exportados/:archivo', ({ params }) => {
+    const f = limpio(params.archivo), e = path.extname(f).slice(1).toLowerCase();
+    return { __file: path.join(dir(params.id), 'export', f), type: { mp4: 'video/mp4', mov: 'video/quicktime', gif: 'image/gif', wav: 'audio/wav', mp3: 'audio/mpeg' }[e] || 'application/octet-stream' };
+  });
   // Portada: el motor guarda portada.png en la carpeta del proyecto.
   route.post('/proyectos/:id/portada', async ({ params, body }) => {
     const d = dir(params.id);

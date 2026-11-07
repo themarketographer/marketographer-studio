@@ -111,3 +111,126 @@ def formato(proj, f, y=0.45, x=0.5):
     status(proj, "listo", 100, out.name)
     return out
 
+
+# ---------- presets de exportación (una sola pasada de ffmpeg sobre final.mp4) ----------
+import json
+import functools
+
+
+@functools.lru_cache(maxsize=None)
+def _encoders():
+    return subprocess.run([ffmpeg_exe(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+
+
+def _carga_presets():
+    return json.loads(Path(__file__).with_name("presets_export.json").read_text(encoding="utf8"))["presets"]
+
+
+def _valida(c):
+    """Revisa un ajuste personalizado; cualquier valor raro se rechaza."""
+    if c.get("codec") not in ("h264", "hevc", "prores"):
+        raise RuntimeError("Ajuste no válido")
+    if c.get("corto") not in (720, 1080, 1440, 2160):
+        raise RuntimeError("Ajuste no válido")
+    if c.get("fps") not in (None, 24, 25, 30, 60):
+        raise RuntimeError("Ajuste no válido")
+    if c["codec"] != "prores" and not (1 <= float(c.get("mbps", 0)) <= 80):
+        raise RuntimeError("Ajuste no válido")
+    c.setdefault("ext", "mov" if c["codec"] == "prores" else "mp4")
+    c.setdefault("perfil", 3)
+    return c
+
+
+def _args_de(cfg, w, h):
+    """Lista de argumentos de ffmpeg (sin entrada ni salida) y una nota opcional. Función pura, se puede probar."""
+    cod, nota = cfg["codec"], ""
+    f, af = [], []
+    if cod in ("wav", "mp3"):
+        a = ["-vn", "-c:a", "pcm_s24le", "-ar", "48000"] if cod == "wav" else ["-vn", "-c:a", "libmp3lame", "-b:a", "256k"]
+    else:
+        corto = cfg.get("corto")
+        if corto:
+            c = min(corto, min(w, h))
+            if corto > min(w, h):
+                nota = f"No se amplía: el video se armó en {min(w, h)}"
+            f.append(f"scale='if(gt(iw,ih),-2,{c})':'if(gt(iw,ih),{c},-2)':flags=lanczos")
+        if cfg.get("fps"):
+            f.append(f"fps={cfg['fps']}")
+        mb = cfg.get("mbps", 10)
+        if cod == "gif":
+            vf = ",".join([f"fps={cfg.get('fps', 15)}"] + [x for x in f if not x.startswith("fps")] + ["split[a][b];[a]palettegen[p];[b][p]paletteuse"])
+            return ["-t", "15", "-vf", vf, "-an"], (nota + " " if nota else "") + "El GIF usa solo los primeros 15 s"
+        if cod == "h264":
+            v = ["-c:v", "h264_videotoolbox", "-b:v", f"{mb}M", "-maxrate", f"{1.5 * mb:g}M"] if "h264_videotoolbox" in _encoders() \
+                else ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-maxrate", f"{1.5 * mb:g}M", "-bufsize", f"{3 * mb:g}M"]
+            v += ["-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+        elif cod == "hevc":
+            if "hevc_videotoolbox" not in _encoders():
+                raise RuntimeError("Esta Mac no tiene HEVC por hardware")
+            v = ["-c:v", "hevc_videotoolbox", "-b:v", f"{mb}M", "-tag:v", "hvc1", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+        else:  # prores
+            v = ["-c:v", "prores_ks", "-profile:v", str(cfg.get("perfil", 3)), "-pix_fmt", "yuv422p10le"]
+        a = v + (["-c:a", "pcm_s24le"] if cod == "prores" else ["-c:a", "aac", "-b:a", "320k", "-ar", "48000"])
+        if f:
+            a = ["-vf", ",".join(f)] + a
+    if cfg.get("lufs") is not None:
+        af.append(f"loudnorm=I={cfg['lufs']}:TP=-1:LRA=11")
+    if af:
+        a += ["-af", ",".join(af)]
+    return a, nota
+
+
+def medir(path):
+    """Volumen del archivo: LUFS integrado y pico (dBFS)."""
+    r = subprocess.run([ffmpeg_exe(), "-hide_banner", "-nostats", "-i", str(path), "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True).stderr
+    i = re.findall(r"I:\s+(-?[\d.]+) LUFS", r)
+    p = re.findall(r"Peak:\s+(-?[\d.]+) dBFS", r)
+    return {"lufs": float(i[-1]) if i else None, "pico": float(p[-1]) if p else None}
+
+
+def preset(proj, pid, custom=None):
+    proj = Path(proj)
+    src = proj / "final.mp4"
+    if not src.exists():
+        raise RuntimeError("Primero exporta el video final.")
+    if pid == "custom":
+        cfg = _valida(dict(custom or {}))
+    else:
+        cfg = next((p for p in _carga_presets() if p["id"] == pid), None)
+        if not cfg:
+            raise RuntimeError("Ajuste no válido")
+    w, h, _, _ = probe(src)
+    args, nota = _args_de(cfg, w, h)
+    nombre = re.sub(r"[^\w-]+", "-", load(proj, "meta.json", {}).get("nombre", proj.name)).strip("-") or "video"
+    carpeta = proj / "export"
+    carpeta.mkdir(exist_ok=True)
+    out = carpeta / f"{nombre}-{pid}.{cfg['ext']}"
+    status(proj, "formato", 20, f"Exportando {cfg.get('n', pid)}")
+    subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(src), *args, str(out)], check=True)
+    med = {}
+    if cfg["ext"] in ("mp4", "mov", "wav", "mp3"):
+        med = medir(out)
+    mj = carpeta / "medidas.json"
+    try:
+        todo = json.loads(mj.read_text(encoding="utf8"))
+    except Exception:
+        todo = {}
+    todo[out.name] = {**med, "nota": nota}
+    mj.write_text(json.dumps(todo, ensure_ascii=False), encoding="utf8")
+    status(proj, "listo", 100, "export/" + out.name)
+    return out
+
+
+def _prueba():
+    redes = next(p for p in _carga_presets() if p["id"] == "redes")
+    a, _ = _args_de(redes, 1080, 1920)
+    assert any("scale=" in x for x in a) and any("loudnorm" in x for x in a)
+    gif = next(p for p in _carga_presets() if p["id"] == "gif")
+    g, _ = _args_de(gif, 1080, 1920)
+    assert "-c:a" not in g and "-an" in g
+    try:
+        _valida({"codec": "h264", "corto": 999, "mbps": 10})
+        assert False, "debía fallar"
+    except RuntimeError:
+        pass
+    print("ok")

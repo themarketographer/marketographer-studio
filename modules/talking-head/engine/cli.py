@@ -11,7 +11,7 @@ from common import status
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn", "matte"])
+    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn", "matte", "exportar"])
     ap.add_argument("carpeta")
     ap.add_argument("--calidad", default="final", choices=["borrador", "medio", "final"])
     ap.add_argument("--desde", type=float, default=0.0)
@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--c1", default="")
     ap.add_argument("--c2", default="")
     ap.add_argument("--imagen", default="")
+    ap.add_argument("--preset", default="redes")
+    ap.add_argument("--custom", default="")
     ap.add_argument("--hilos", type=int, default=0, help="0 = automático, 1 = un solo proceso")
     ap.add_argument("--tramo", default="", help="uso interno: k0:k1, fotogramas que dibuja este proceso")
     a = ap.parse_args()
@@ -84,6 +86,9 @@ def main():
         elif a.accion == "formato":
             import exportar
             exportar.formato(proj, a.fmt, a.y if a.y >= 0 else 0.45, a.x)
+        elif a.accion == "exportar":
+            import exportar, json
+            exportar.preset(proj, a.preset, json.loads(a.custom) if a.custom else None)
         elif a.accion == "plan":
             import plan
             plan.run(proj, a.solo)

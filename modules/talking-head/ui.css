@@ -458,3 +458,8 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .col-video .phone.ancho, .ed.grande .col-video .phone.ancho, .ed.solo .col-video .phone.ancho { width: 100%; }
 @media (max-width: 900px) { .ed.ancho { grid-template-columns: 1fr; } .col-video .phone.ancho, .ed.solo .col-video .phone.ancho { width: 100%; } }
 .portada-prev, .cand-b img, .var-b img { aspect-ratio: var(--asp, 9 / 16); }
+
+/* Exportar: tarjetas de formato y lista de archivos */
+.pz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.lista-export { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.lista-export small { color: var(--ink-muted); }

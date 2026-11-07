@@ -1,0 +1,10 @@
+{ "presets": [
+  { "id": "redes",    "n": "Redes (TikTok, Reels, Shorts)", "uso": "Lo que más usas. Sonido parejo a −14 LUFS.", "codec": "h264", "corto": 1080, "mbps": 12, "lufs": -14, "ext": "mp4" },
+  { "id": "youtube",  "n": "YouTube", "uso": "Alta calidad para YouTube y web.", "codec": "h264", "corto": 1080, "mbps": 16, "lufs": -14, "ext": "mp4" },
+  { "id": "liviano",  "n": "Liviano (WhatsApp)", "uso": "Pesa poco, para mandar por chat.", "codec": "h264", "corto": 720, "mbps": 4, "lufs": -14, "ext": "mp4" },
+  { "id": "hevc",     "n": "HEVC (más chico)", "uso": "Misma calidad, archivo más pequeño. iPhone y Mac.", "codec": "hevc", "corto": 1080, "mbps": 8, "lufs": null, "ext": "mp4" },
+  { "id": "prores",   "n": "Máxima calidad (ProRes 422 HQ)", "uso": "Para seguir editando en otro programa. Pesa mucho.", "codec": "prores", "perfil": 3, "corto": 1080, "lufs": null, "ext": "mov" },
+  { "id": "gif",      "n": "GIF", "uso": "Animación corta sin sonido.", "codec": "gif", "corto": 360, "fps": 12, "ext": "gif" },
+  { "id": "wav",      "n": "Solo audio (WAV)", "uso": "El sonido final sin comprimir.", "codec": "wav", "lufs": null, "ext": "wav" },
+  { "id": "mp3",      "n": "Solo audio (MP3)", "uso": "El sonido final, liviano.", "codec": "mp3", "lufs": -14, "ext": "mp3" }
+] }

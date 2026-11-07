@@ -1,4 +1,5 @@
 // Editor de Talking Head: sube un video, el motor propone títulos, subtítulos, zooms y sonidos, y tú ajustas con controles simples.
+import { hojaExportar } from './exportar-ui.js';
 const POS = [['detras', 'Detrás de ti'], ['arriba', 'Arriba'], ['centro', 'Centro'], ['abajo', 'Abajo']];
 const TAM = [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];
 const ANIM = [['pop', 'Rebote corto'], ['elastico', 'Elástico'], ['ruleta', 'Ruleta'], ['deslizar', 'Sube'], ['escribir', 'Se escribe'], ['fade', 'Aparece'], ['bajar', 'Baja'], ['crecer', 'Crece'], ['rebote', 'Rebote largo'], ['tiembla', 'Tiembla']];
@@ -605,7 +606,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       S.p.status = r.status; S.p.corriendo = r.corriendo;
       if (!r.corriendo) {
         stopPoll();
-        const eraRender = r.status?.etapa === 'listo' && !/^(subtitulos\.srt|final_)/.test(r.status?.msg || '');
+        const eraRender = r.status?.etapa === 'listo' && !/^(subtitulos\.srt|final_|export\/)/.test(r.status?.msg || '');
         const d = await api(`${A}/proyectos/${S.p.id}`);
         prepararPlan(d);
         S.p = d; S.bust = Date.now();
@@ -776,6 +777,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('div', { class: 'actions col sticky-ex' },
         h('button', { class: 'btn gold', onclick: () => lanzar('renderizar', { calidad: 'final' }, true), html: icon('check') + ` Exportar video ${etqSalida(S.p.plan)}` }),
         p.tieneFinal ? h('button', { class: 'btn ghost', onclick: () => verResultado('final'), html: ic('pelicula', 16) + ' Ver el último video exportado' }) : null,
+        h('button', { class: 'btn ghost', onclick: () => abrirHoja('exportar'), html: ic('descargar', 16) + ' Más formatos' }),
         h('p', { class: 'sub ex-nota' }, 'Lo que ves arriba es el video tal como saldrá, con tus ajustes, sonidos y música, y se actualiza al instante.')));
   }
   // ---------- línea de tiempo: títulos, zooms, cámara lenta y cortes de un vistazo ----------
@@ -903,6 +905,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     sonidos: ['Efectos de sonido', 'Qué suena en cada título, zoom y cierre, y tus propios sonidos.', () => panelSonidos()],
     cierre: ['Tarjeta final', 'El cierre con tu llamado a la acción.', () => panelCierre()],
     publicar: ['Portada y caption', 'Todo lo que necesitas para publicar.', () => panelPublicar()],
+    exportar: ['Exportar', 'Elige para dónde es el video. Se arma una vez y sale en todos los formatos que quieras.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
     ajustes: ['Ajustes', 'Se guardan en este navegador y valen para todos tus videos.', () => panelAjustes()],
   };
   function abrirHoja(id) {
