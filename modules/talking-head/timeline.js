@@ -16,7 +16,7 @@ export function imanar(t, puntos, tol) {
 }
 // node -e "import('./timeline.js').then(m=>{console.assert(m.imanar(1.02,[0,1,2],0.05)===1);console.assert(m.imanar(1.5,[0,1,2],0.05)===1.5);console.assert(m.imanar(3,[],1)===3)})"
 
-export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr }) {
+export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr }) {
   let pxs = 40, ajustar = true, sel = null, rango = null, iman = true, abierto = true, raf = 0, destruido = false, guia = null;
   try { abierto = localStorage.getItem('estudio.timeline') !== '0'; } catch { /* sin memoria */ }
   const dur = () => getPlan().duration || 1;
@@ -28,7 +28,7 @@ export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, get
   const bImn = btn('Imán', 'Pegar a palabras y bordes (tecla S)', () => { iman = !iman; bImn.classList.toggle('on', iman); bImn.setAttribute('aria-pressed', String(iman)); }, 'on');
   bImn.setAttribute('aria-pressed', 'true');
   const bAbrir = btn('', 'Mostrar u ocultar la línea de tiempo', () => { abierto = !abierto; try { localStorage.setItem('estudio.timeline', abierto ? '1' : '0'); } catch { /* sin memoria */ } el.classList.toggle('abierto', abierto); pintar(); }, 'lt-abrir');
-  const barra = h('div', { class: 'lt-barra' }, bAbrir, btn('−', 'Alejar', () => zoom(0.7)), btn('+', 'Acercar', () => zoom(1.4)), btn('Ajustar', 'Ver todo el video', () => { ajustar = true; pintar(); }), bImn, accion, info);
+  const barra = h('div', { class: 'lt-barra' }, bAbrir, btn('−', 'Alejar', () => zoom(0.7)), btn('+', 'Acercar', () => zoom(1.4)), btn('Ajustar', 'Ver todo el video', () => { ajustar = true; pintar(); }), bImn, barraExtra, accion, info);
   const etiquetas = h('div', { class: 'lt-etq' }, PISTAS.map(([, n, y, a]) => h('span', { style: `top:${y}px;height:${a}px` }, n)));
   const inner = h('div', { class: 'lt-inner' });
   const scroll = h('div', { class: 'lt-scroll' }, inner);

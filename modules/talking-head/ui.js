@@ -655,6 +655,39 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
   async function guardarYa() { clearTimeout(S.guardar); await api(`${A}/proyectos/${S.p.id}/plan`, { method: 'PUT', body: plan() }); }
 
+  // ---------- Espacio de trabajo (como los paneles acoplables de FilmCraft): video | ajustes | línea de tiempo, con divisores que se arrastran ----------
+  const DISENOS = { edicion: ['Edición', 420, 300], video: ['Video grande', 560, 230], tiempo: ['Línea de tiempo grande', 330, 460] };
+  const leerDiseno = () => { try { return { ...{ v: 420, h: null }, ...JSON.parse(localStorage.getItem('estudio.layout') || '{}') }; } catch { return { v: 420, h: null }; } };  // h null = automática (un tercio de la altura)
+  const guardarDiseno = (d) => { try { localStorage.setItem('estudio.layout', JSON.stringify(d)); } catch { /* sin memoria */ } };
+  function espacioDeTrabajo(ed) {
+    const D = leerDiseno();
+    const aplicar = () => {
+      const r = ed.getBoundingClientRect();
+      ed.style.setProperty('--ws-top', `${Math.round(r.top + window.scrollY)}px`);
+      ed.style.setProperty('--col-video', `${Math.max(260, Math.min(D.v, ed.clientWidth - 380))}px`);
+      ed.style.setProperty('--alto-tl', `${Math.round(Math.max(130, Math.min(D.h ?? window.innerHeight * 0.34, window.innerHeight * 0.45)))}px`);  // la línea de tiempo nunca se come más del 45 % de la altura
+    };
+    aplicar();
+    const arrastrar = (div, eje) => div.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); try { div.setPointerCapture(e.pointerId); } catch { /* sin captura, se sigue con los eventos del divisor */ } div.classList.add('on');
+      const x0 = e.clientX, y0 = e.clientY, v0 = D.v, h0 = D.h ?? Math.round(window.innerHeight * 0.34);
+      const mover = (ev) => { if (eje === 'v') D.v = v0 + (ev.clientX - x0); else D.h = (h0 ?? D.h ?? 300) - (ev.clientY - y0); aplicar(); if (timeline) timeline.pintar(); };
+      const fin = () => { div.classList.remove('on'); div.removeEventListener('pointermove', mover); div.removeEventListener('pointerup', fin); guardarDiseno(D); };
+      div.addEventListener('pointermove', mover); div.addEventListener('pointerup', fin);
+    });
+    const teclas = (div, eje) => div.addEventListener('keydown', (e) => {
+      const paso = e.shiftKey ? 60 : 20, d = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -paso : e.key === 'ArrowRight' || e.key === 'ArrowDown' ? paso : 0;
+      if (!d) return; e.preventDefault();
+      if (eje === 'v') D.v += d; else D.h = (D.h ?? Math.round(window.innerHeight * 0.34)) - d; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar();
+    });
+    const mk = (eje, rol) => h('div', { class: `ws-div ws-div-${eje}`, role: 'separator', 'aria-orientation': eje === 'v' ? 'vertical' : 'horizontal', tabindex: '0', title: 'Arrastra para cambiar el tamaño. Doble clic para volver al tamaño de siempre.',
+      'aria-label': rol, ondblclick: () => { D[eje] = eje === 'v' ? 420 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); } });
+    const dv = mk('v', 'Tamaño del video'), dh = mk('h', 'Tamaño de la línea de tiempo');
+    arrastrar(dv, 'v'); arrastrar(dh, 'h'); teclas(dv, 'v'); teclas(dh, 'h');
+    ed.append(dv, dh);
+    ed._diseno = (clave) => { const [, v, hh] = DISENOS[clave]; D.v = v; D.h = hh; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); };
+    window.addEventListener('resize', () => { if (ed.isConnected) { aplicar(); if (timeline) timeline.pintar(); } });
+  }
   function pintar() {
     const p = S.p;
     const cab = h('div', { class: 'row-between' },
@@ -673,7 +706,9 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         h('button', { class: 'btn gold', onclick: () => lanzar('analizar', {}), html: icon('play') + ' Analizar video' })));
     }
     root.style.setProperty('--asp', FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']);
-    root.replaceChildren(cab, titulo, h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null));
+    const ed = h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
+    root.replaceChildren(cab, titulo, ed);
+    if (ed.classList.contains('ws')) espacioDeTrabajo(ed);
     decorar(root);
     if (S.panel) montarHoja();
   }
@@ -780,7 +815,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, barraExtra: window.innerWidth >= 900 ? h('select', { class: 'tl-diseno', 'aria-label': 'Diseño de la pantalla', title: 'Diseño de la pantalla', onchange: (e) => { document.querySelector('.ed.ws')?._diseno(e.target.value); e.target.value = ''; } }, h('option', { value: '' }, 'Diseño ▾'), ...Object.entries(DISENOS).map(([k, v]) => h('option', { value: k }, v[0]))) : null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
@@ -974,7 +1009,8 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const hoja = h('aside', { class: 'hoja', role: 'dialog', 'aria-label': titulo, onkeydown: (e) => { if (e.key === 'Escape') cerrarHoja(); } },
       h('div', { class: 'hoja-head' }, h('div', {}, h('h2', {}, titulo), h('p', { class: 'sub' }, nota)), cerrar),
       nav, panelEl, h('p', { class: 'hint hoja-foot' }, S.panel === 'ajustes' ? 'Se guarda solo, en este navegador.' : 'Se guarda solo. Los cambios ya se ven en el video.'));
-    root.append(fondo, hoja);
+    const wsEd = document.querySelector('.ed.ws');
+    if (wsEd) wsEd.append(hoja); else root.append(fondo, hoja);  // en pantalla ancha la tarjeta queda acoplada junto al video, sin tapar nada
     document.querySelector('.ed')?.classList.add('con-hoja');
     if (S.panel !== 'propiedades') cerrar.focus();
     pintarPanel();
