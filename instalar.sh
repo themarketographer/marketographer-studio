@@ -58,8 +58,8 @@ fi
 
 paso "6/6 Creando la app"
 mkdir -p data
+APPS="/Applications"; [ -w "$APPS" ] || { APPS="$HOME/Applications"; mkdir -p "$APPS"; }
 if [ -z "$ESTUDIO_SIN_APP" ]; then
-  APPS="/Applications"; [ -w "$APPS" ] || { APPS="$HOME/Applications"; mkdir -p "$APPS"; }
   rm -rf "$APPS/Estudio Marketographer.app"
   cp -R Estudio.app "$APPS/Estudio Marketographer.app"
   mkdir -p "$HOME/Library/Application Support/EstudioMarketographer"
