@@ -483,6 +483,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const el = elClip(ev.archivo); if (!el) return;
     clipVistos.add(ev.archivo);
     if (el.tagName === 'VIDEO') {
+      el.muted = !(ev.vol > 0.01); el.volume = clamp(ev.vol || 0);  // sonido del clip: 0 = mudo
       const w0 = (ev.desde || 0) + d, w = el.duration ? Math.min(w0, el.duration - 0.05) : w0;
       if (!vs.paused) { if (el.paused) { el.currentTime = w; el.play().catch(() => {}); } else if (Math.abs(el.currentTime - w) > 0.3) el.currentTime = w; }
       else { if (!el.paused) el.pause(); if (Math.abs(el.currentTime - w) > 0.04) el.currentTime = w; }
@@ -1065,6 +1066,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const t = vs.currentTime || 0, out = [];
     (P.events || []).filter((e) => e.start - 0.02 <= t && t < e.end && e.kind !== 'punto').forEach((e) => {
       const base = e.kind ? (KIND_Y[e.kind] ?? 0.4) : (POS_Y[e.pos] ?? 0.3);
+      if (e.kind === 'clip') { if (e.modo === 'ventana') out.push({ y: e.y ?? 0.3, x: e.x ?? 0.5, min: 0.04, max: 0.95, set: (v) => { e.y = v; }, setX: (v) => { e.x = v; } }); return; }
       if (e.kind === 'sticker') out.push({ y: e.y ?? base, x: e.x ?? 0.5, min: 0.04, max: 0.95, set: (v) => { e.y = v; }, setX: (v) => { e.x = v; } });
       else out.push({ y: e.y ?? ajustes.get(e) ?? base, min: 0.08, max: 0.85, set: (v) => { e.y = v; } });
     });

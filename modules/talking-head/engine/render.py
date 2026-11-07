@@ -712,9 +712,14 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             sonidos.append((mapa.total, style.get("sfxCierre", "ding")))
         return sonidos
 
+    def clips_de():
+        broll = proj.parent.parent / "broll"
+        return [(mapa.fuera(e["start"]), broll / str(e.get("archivo", "")), float(e.get("desde", 0)), e["end"] - e["start"], float(e.get("vol", 0)))
+                for e in events if e.get("kind") == "clip" and float(e.get("vol", 0)) > 0.01 and re.search(r"\.(mp4|mov|m4v|webm)$", str(e.get("archivo", "")), re.I) and (broll / str(e.get("archivo", ""))).exists()]
+
     def cerrar(extra, audio=None):
         final = proj / ("final.mp4" if calidad == "final" and desde == 0 and hasta >= dur - 0.1 else "preview.mp4")
-        mux(proj, tmp, final, sonidos_de(extra), keep, plan, fps, extra, audio)
+        mux(proj, tmp, final, sonidos_de(extra), keep, plan, fps, extra, audio, clips_de())
         tmp.unlink(missing_ok=True)
         status(proj, "listo", 100, final.name)
         return final
@@ -724,7 +729,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
         extra_p = max(int(round(cierre["dur"] * fps)), 1) / fps if cierre["on"] and hasta >= dur - 0.1 else 0.0
         res = {}
         # el audio no depende del video dibujado: se arma mientras los procesos dibujan los cuadros
-        hilo = threading.Thread(target=lambda: res.update(a=audio_final(proj, sonidos_de(extra_p), keep, plan, fps, extra_p)), daemon=True)
+        hilo = threading.Thread(target=lambda: res.update(a=audio_final(proj, sonidos_de(extra_p), keep, plan, fps, extra_p, clips_de())), daemon=True)
         hilo.start()
         paralelo(proj, calidad, desde, hasta, total, n_h, tmp)
         hilo.join()
@@ -1106,7 +1111,7 @@ def audio_original(proj):
     return np.frombuffer(raw, np.float32).reshape(-1, 2).copy()
 
 
-def audio_final(proj, sonidos, keep, plan, fps, extra=0.0):
+def audio_final(proj, sonidos, keep, plan, fps, extra=0.0, clips=()):
     """Arma el audio: voz de los tramos que se quedan (con fundidos en cada unión), mejoras, música y efectos."""
     full = audio_original(proj)
     sr = sfx.SR
@@ -1149,13 +1154,27 @@ def audio_final(proj, sonidos, keep, plan, fps, extra=0.0):
             continue
         seg = snd[: len(audio) - i0] * gain
         audio[i0:i0 + len(seg)] += seg[:, None]
+    for t_ini, ruta, desde, dur, vol in clips:  # sonido del B-roll (volumen 0 = mudo, no llega aquí)
+        raw = subprocess.run([ffmpeg_exe(), "-v", "error", "-ss", f"{desde:.3f}", "-t", f"{dur:.3f}", "-i", str(ruta), "-vn", "-f", "f32le", "-ar", str(sr), "-ac", "2", "-"],
+                             capture_output=True).stdout
+        snd = np.frombuffer(raw, np.float32).reshape(-1, 2).copy() if len(raw) >= 8 else None
+        i0 = int(t_ini * sr)
+        if snd is None or i0 < 0 or i0 >= len(audio):
+            continue
+        n = min(int(0.15 * sr), len(snd) // 2)  # entra y sale suave
+        if n > 1:
+            ramp = np.linspace(0, 1, n, dtype=np.float32)[:, None]
+            snd[:n] *= ramp
+            snd[-n:] *= ramp[::-1]
+        snd = snd[: len(audio) - i0] * float(vol)
+        audio[i0:i0 + len(snd)] += snd
     return np.clip(audio, -1, 1)
 
 
-def mux(proj, video, out, sonidos, keep, plan, fps, extra=0.0, audio=None):
+def mux(proj, video, out, sonidos, keep, plan, fps, extra=0.0, audio=None, clips=()):
     """Une el video ya dibujado con el audio (se puede pasar el audio ya armado para no esperarlo)."""
     if audio is None:
-        audio = audio_final(proj, sonidos, keep, plan, fps, extra)
+        audio = audio_final(proj, sonidos, keep, plan, fps, extra, clips)
     sr = sfx.SR
     subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(video), "-f", "f32le", "-ar", str(sr), "-ac", "2", "-i", "-",
                     "-af", "alimiter=limit=0.97", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out)],

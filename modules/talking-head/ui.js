@@ -2340,6 +2340,7 @@ Lo que necesito de ti:
         BROLLS.map((f) => h('option', { value: f.nombre, selected: f.nombre === ev.archivo }, f.nombre)))),
       seg('Cómo se ve', [['pantalla', 'Pantalla completa'], ['ventana', 'En una ventana']], ev.modo || 'pantalla', (v) => { ev.modo = v; refrescar(); }),
       esVideoBroll(ev.archivo) ? h('label', { class: 'mini-f' }, 'Empezar el clip en el segundo', h('input', { type: 'number', step: '0.1', min: 0, value: ev.desde || 0, onchange: (e) => { ev.desde = Math.max(0, +e.target.value); cambio(); } })) : null,
+      esVideoBroll(ev.archivo) ? slider('Sonido del clip', 0, 1, 0.05, ev.vol ?? 0, (v) => (v < 0.03 ? 'Sin sonido' : `${Math.round(v * 100)}%`), (v) => { ev.vol = v; cambio(); }, 0) : null,
       ev.modo === 'ventana' ? slider('Tamaño de la ventana', 0.15, 1, 0.01, ev.ancho ?? 0.5, (v) => `${Math.round(v * 100)}% del ancho`, (v) => { ev.ancho = v; cambio(); }, 0.5) : null,
       ev.modo === 'ventana' ? slider('Posición a lo ancho', 0, 1, 0.01, ev.x ?? 0.5, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.5) : null,
       ev.modo === 'ventana' ? slider('Posición a lo alto', 0, 1, 0.01, ev.y ?? 0.3, (v) => `${Math.round(v * 100)}%`, (v) => { ev.y = v; cambio(); }, 0.3) : null];
