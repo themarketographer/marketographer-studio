@@ -66,7 +66,7 @@ function zoomScale(zooms, t, estilo, deriva) {
 
 export const DIM_FORMATO = { '9x16': [720, 1280], '16x9': [1280, 720], '1x1': [900, 900], '4x5': [800, 1000] };
 
-export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam, estatico = false, sfxBase = '', sfxUserUrl = null, musicUrl = null, escenaUrl = null, getFiltros = () => ({}) }) {
+export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam, estatico = false, sfxBase = '', sfxUserUrl = null, musicUrl = null, escenaUrl = null, brollUrl = null, getFiltros = () => ({}) }) {
   // El lienzo toma la proporción del formato elegido (9:16, 16:9, 1:1 o 4:5). Si el original es distinto, se recorta, nunca se estira.
   const [W, H] = DIM_FORMATO[(getPlan() || {}).formato] || DIM_FORMATO['9x16'];
   const ZY = H > W ? 0.38 : 0.45;
@@ -238,7 +238,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!act.length) return;
     let sub = null;
     if (s.on) sub = [s.y, (SUB_SIZE[s.size] || 0.038) * 1.12 * (s.maxPal >= 3 ? 2 : 1) + 0.03];
-    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && e.kind !== 'llamada' && e.kind !== 'seccion' && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
+    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && e.kind !== 'llamada' && e.kind !== 'seccion' && e.kind !== 'clip' && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
       const [h, off] = altoEv(e, st), manual = e.y != null;
       const base = manual ? e.y : (e.kind ? (KIND_Y0[e.kind] ?? 0.4) : (POS_Y[e.pos] ?? 0.3));
       return { e, h, off, c: base + off, manual };
@@ -465,6 +465,40 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (rev < 1) { c.beginPath(); c.rect(-w / 2, -hh / 2, w * rev, hh); c.clip(); }
     c.drawImage(im, -w / 2, -hh / 2, w, hh); c.restore();
   }
+  // ---------- B-roll: un video o imagen extra encima del tuyo (pantalla completa o en una ventana) ----------
+  const clipEls = new Map(), clipVistos = new Set();
+  const esVideoClip = (n) => /\.(mp4|mov|m4v|webm)$/i.test(n || '');
+  function elClip(nombre) {
+    if (!nombre || !brollUrl) return null;
+    let el = clipEls.get(nombre);
+    if (!el) {
+      if (esVideoClip(nombre)) { el = document.createElement('video'); el.muted = true; el.playsInline = true; el.preload = 'auto'; el.onloadeddata = el.onseeked = () => { sucio = true; }; }
+      else { el = new Image(); el.onload = () => { sucio = true; }; }
+      el.src = brollUrl(nombre); clipEls.set(nombre, el);
+    }
+    return el;
+  }
+  function dibujarClip(c, ev, t) {
+    const d = t - ev.start, tail = ev.end - t; if (d < 0 || tail <= 0) return;
+    const el = elClip(ev.archivo); if (!el) return;
+    clipVistos.add(ev.archivo);
+    if (el.tagName === 'VIDEO') {
+      const w0 = (ev.desde || 0) + d, w = el.duration ? Math.min(w0, el.duration - 0.05) : w0;
+      if (!vs.paused) { if (el.paused) { el.currentTime = w; el.play().catch(() => {}); } else if (Math.abs(el.currentTime - w) > 0.3) el.currentTime = w; }
+      else { if (!el.paused) el.pause(); if (Math.abs(el.currentTime - w) > 0.04) el.currentTime = w; }
+    }
+    const vw = el.videoWidth || el.naturalWidth, vh = el.videoHeight || el.naturalHeight; if (!vw || !vh) return;
+    const al = clamp(d / 0.2) * clamp(tail / 0.25); if (al <= 0.01) return;
+    c.save(); c.globalAlpha = al;
+    if (ev.modo === 'ventana') {
+      const w = Math.max(ev.ancho || 0.5, 0.05) * W, hh = w * vh / vw, x0 = W * (ev.x ?? 0.5) - w / 2, y0 = H * (ev.y ?? 0.3) - hh / 2;
+      c.beginPath(); c.roundRect(x0, y0, w, hh, Math.min(w, hh) * 0.06); c.clip(); c.drawImage(el, x0, y0, w, hh);
+    } else {
+      const sc = Math.max(W / vw, H / vh), w = vw * sc, hh = vh * sc;
+      c.drawImage(el, (W - w) / 2, (H - hh) / 2, w, hh);
+    }
+    c.restore();
+  }
   // ---------- gráficos esenciales: rótulo, llamada, etiqueta y sección (mismas medidas que engine/graficos.py) ----------
   const NUEVOS = ['rotulo', 'llamada', 'etiqueta', 'seccion'];
   function dibujarNuevo(c, ev, t, st) {
@@ -512,6 +546,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     }
   }
   function dibujarKind(c, ev, t, st) {
+    if (ev.kind === 'clip') return dibujarClip(c, ev, t);
     if (NUEVOS.includes(ev.kind)) return dibujarNuevo(c, ev, t, st);
     if (ev.kind === 'sticker') return dibujarSticker(c, ev, t);
     if (ev.kind === 'escena') return dibujarEscena(c, ev, t, st);
@@ -905,7 +940,10 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       if (pel.sobreMi === false && conMatte) ctx.drawImage(subjC, 0, 0);
     }
     viñeta(ctx, st);
-    front.filter((e) => e.kind !== 'punto').sort((x, y) => (y.kind === 'seccion') - (x.kind === 'seccion')).forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
+    clipVistos.clear();
+    const fondoDe = (e) => (e.kind === 'seccion' || (e.kind === 'clip' && e.modo !== 'ventana') ? 1 : 0);  // lo que cubre la pantalla va debajo de lo demás
+    front.filter((e) => e.kind !== 'punto').sort((x, y) => fondoDe(y) - fondoDe(x)).forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
+    clipEls.forEach((el, n) => { if (!clipVistos.has(n) && el.tagName === 'VIDEO' && !el.paused) el.pause(); });
     dibujarSubs(ctx, t, st, events, 0);
     front.filter((e) => e.kind === 'punto').forEach((e) => dibujarKind(ctx, e, t, st));
     ctx.restore();
@@ -1066,6 +1104,6 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     antes: (v) => { antes = !!v; sucio = true; if (!v) tAud = -1; },
     ir: (t) => { vs.currentTime = t; va.currentTime = t; sucio = true; matteT = -1; },
     alternar,
-    destroy: () => { vivo = false; if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; master = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
+    destroy: () => { vivo = false; clipEls.forEach((el) => { if (el.tagName === 'VIDEO') { el.pause(); el.removeAttribute('src'); el.load(); } }); if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; master = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
   };
 }

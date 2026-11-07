@@ -544,6 +544,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     ESCIMG = await api(A + '/escenas').catch(() => []);
     COMBOS = await api(A + '/combos').catch(() => COMBOS);
     FILTROS = await api(A + '/filtros').then((x) => x.filtros).catch(() => FILTROS);
+    BROLLS = await api(A + '/broll').catch(() => []);
     SFXU = await api(A + '/sfx').catch(() => []);
     prepararPlan(S.p);
     S.dim = await dimsVideo(`/api${A}/proyectos/${id}/video/source`);
@@ -625,8 +626,21 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const el = document.getElementById('th-prog'); if (!el) return;
     const st = S.p.status || {};
     el.querySelector('strong').textContent = ETAPAS[st.etapa] || 'Trabajando';
-    el.querySelector('small').textContent = st.msg || '';
+    el.querySelector('small').textContent = [st.msg, tiempoRestante(st)].filter(Boolean).join(' · ');
     el.querySelector('.bar i').style.width = (st.pct || 0) + '%';
+  }
+  // Tiempo que falta (idea de FilmCraft): se mide con la velocidad de los últimos 15 s, no con el promedio desde el inicio,
+  // porque unos tramos del video pesan más que otros. No dice nada hasta tener 1 s de avance.
+  function tiempoRestante(st) {
+    const ahora = Date.now(), pct = Number(st.pct) || 0, R = (S.ritmo = S.ritmo || []);
+    if (S.ritmoEtapa !== st.etapa || (R.length && pct < R[R.length - 1][1])) { R.length = 0; S.ritmoEtapa = st.etapa; }
+    if (!R.length || pct > R[R.length - 1][1]) R.push([ahora, pct]);  // solo cuando el avance se movió
+    while (R.length > 2 && ahora - R[1][0] >= 15000) R.shift();
+    const [t0, p0] = R[0], [t1, p1] = R[R.length - 1];
+    if (R.length < 2 || t1 - t0 < 1000 || p1 <= p0) return '';
+    const seg = Math.max(0, ((100 - p1) / ((p1 - p0) / ((t1 - t0) / 1000))) - (ahora - t1) / 1000);
+    if (seg > 3600 * 5) return '';
+    return seg < 5 ? 'casi listo' : seg < 90 ? `faltan ~${Math.round(seg / 5) * 5} s` : `faltan ~${Math.round(seg / 60)} min`;
   }
   const progreso = () => h('div', { class: 'card center', id: 'th-prog', role: 'status' }, h('strong', {}, 'Trabajando'), h('div', { class: 'bar' }, h('i', { style: 'width:0%' })), h('small', {}, ''));
 
@@ -755,7 +769,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (timeline) { timeline.destroy(); timeline = null; }
     let pantalla;
     if (S.tab === 'live') {
-      live = crearLive({ onEdit: () => cambio(), getFiltros: () => Object.fromEntries(FILTROS.map((f) => [f.id, f.ops])), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}` });
+      live = crearLive({ onEdit: () => cambio(), getFiltros: () => Object.fromEntries(FILTROS.map((f) => [f.id, f.ops])), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}`, brollUrl: (n) => `/api${A}/broll/${encodeURIComponent(n)}` });
       video = live.video; pantalla = live.el;
     } else {
       video = h('video', { controls: true, playsinline: true, src: vurl(S.tab), class: 'player', onloadedmetadata: (e) => { const vw = e.target.videoWidth, vh = e.target.videoHeight; if (vw) { const ph = e.target.closest('.phone'); ph.style.aspectRatio = `${vw} / ${vh}`; ph.classList.toggle('ancho', vw / vh > 1.2); e.target.closest('.ed')?.classList.toggle('ancho', vw / vh > 1.2); } } }); pantalla = video;
@@ -922,7 +936,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     sonidos: ['Efectos de sonido', 'Qué suena en cada título, zoom y cierre, y tus propios sonidos.', () => panelSonidos()],
     cierre: ['Tarjeta final', 'El cierre con tu llamado a la acción.', () => panelCierre()],
     publicar: ['Portada y caption', 'Todo lo que necesitas para publicar.', () => panelPublicar()],
-    propiedades: ['Propiedades', 'Los ajustes de lo que elegiste en la línea de tiempo.', () => cuerpoPropiedades(S.selTL, { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, abrirTitulo: (id) => S.abiertos.add(id) })],
+    propiedades: ['Propiedades', 'Los ajustes de lo que elegiste en la línea de tiempo.', () => cuerpoPropiedades(S.selTL, { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, cuerpoClip, abrirTitulo: (id) => S.abiertos.add(id) })],
     exportar: ['Exportar', 'Elige para dónde es el video. Se arma una vez y sale en todos los formatos que quieras.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
     ajustes: ['Ajustes', 'Se guardan en este navegador y valen para todos tus videos.', () => panelAjustes()],
   };
@@ -2031,6 +2045,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
 
   // ----- Frases animadas (voz en off): texto cinético con animaciones que se conectan solas -----
   let FILTROS = [];
+  let BROLLS = [];
   let COMBOS = { combos: [], emojis: {}, mezcla: [] };
   const ANIM_NOM = { pop: 'Pop', deslizar: 'Desliza', caer: 'Cae', escribir: 'Escribe', desenfoque: 'Enfoca', zoom: 'Zoom', rebote: 'Rebota', resorte: 'Resorte' };
   const SALIDAS = [['auto', 'Según la animación'], ['fade', 'Se desvanece'], ['subir', 'Sube'], ['bajar', 'Baja'], ['encoger', 'Se encoge'], ['corte', 'Corte directo']];
@@ -2179,9 +2194,9 @@ Lo que necesito de ti:
   }
 
   // ----- Capas: todo lo que agregaste, en orden, y cada cosa se edita en vivo -----
-  const TIPO_CAPA = (e) => (e.kind === 'escena' ? 'Escena' : e.kind === 'frase' ? 'Frase' : e.kind === 'sticker' ? (e.fija ? 'Marca' : 'Sticker') : e.kind ? 'Elemento' : 'Título');
+  const TIPO_CAPA = (e) => (e.kind === 'escena' ? 'Escena' : e.kind === 'frase' ? 'Frase' : e.kind === 'sticker' ? (e.fija ? 'Marca' : 'Sticker') : e.kind === 'clip' ? 'B-roll' : e.kind ? 'Elemento' : 'Título');
   const NOM_KIND = { lista: 'Lista', conexion: 'Conexión', numero: 'Número', barras: 'Barras', rotulo: 'Nombre y cargo', llamada: 'Llamada', etiqueta: 'Etiqueta', seccion: 'Sección', punto: 'Cambio de escena' };
-  const nombreCapa = (e) => (e.kind === 'sticker' ? e.archivo || 'Sin imagen' : e.kind === 'escena' ? `${e.emoji || ''} ${(e.items || []).join(' ')}`.trim() || 'Escena'
+  const nombreCapa = (e) => (e.kind === 'sticker' ? e.archivo || 'Sin imagen' : e.kind === 'clip' ? e.archivo || 'Sin archivo' : e.kind === 'escena' ? `${e.emoji || ''} ${(e.items || []).join(' ')}`.trim() || 'Escena'
     : e.kind === 'punto' ? 'Punto que cambia de escena' : e.kind && NOM_KIND[e.kind] ? `${NOM_KIND[e.kind]}: ${(e.text || '').slice(0, 30)}` : String(e.text || '').replace(/\*/g, ''));
   const irA = (t) => { if (video) video.currentTime = tVideo(t); if (live) live.ir(tVideo(t)); };
   const duplicarCapa = (ev) => { const c = structuredClone(ev); c.id = 'd' + Date.now().toString(36); const dur = ev.end - ev.start; c.start = +(ev.end + 0.2).toFixed(2); c.end = +(c.start + dur).toFixed(2); plan().events.push(c); S.abiertos.add(c.id); refrescar(); irA(c.start); };
@@ -2255,7 +2270,7 @@ Lo que necesito de ti:
       ev.fija ? null : seg('Salida', SALIDAS.filter((x) => x[0] !== 'auto'), ev.salida || 'fade', (v) => { ev.salida = v; refrescar(); }),
       h('small', { class: 'hint' }, 'También puedes arrastrarlo directamente sobre el video.')];
   }
-  const cuerpoDe = (ev) => (ev.kind === 'escena' ? cuerpoEscena(ev) : ev.kind === 'frase' ? cuerpoFrase(ev) : ev.kind === 'sticker' ? cuerpoSticker(ev) : cuerpoEspecial(ev));
+  const cuerpoDe = (ev) => (ev.kind === 'escena' ? cuerpoEscena(ev) : ev.kind === 'frase' ? cuerpoFrase(ev) : ev.kind === 'sticker' ? cuerpoSticker(ev) : ev.kind === 'clip' ? cuerpoClip(ev) : cuerpoEspecial(ev));
   // Fila de una capa: se abre para editar y cada cambio se ve al instante en el video.
   function capa(ev) {
     if (!ev.kind) return filaTitulo(ev);
@@ -2274,8 +2289,8 @@ Lo que necesito de ti:
     const filtro = S.filtroCapas || 'todo';
     const todas = plan().events.slice().sort((a, b) => a.start - b.start);
     const cuenta = { todo: todas.length, titulo: todas.filter((e) => !e.kind).length, escena: todas.filter((e) => e.kind === 'escena').length, frase: todas.filter((e) => e.kind === 'frase').length, sticker: todas.filter((e) => e.kind === 'sticker').length, elemento: todas.filter((e) => e.kind && !['escena', 'frase', 'sticker'].includes(e.kind)).length };
-    const pasa = (e) => filtro === 'todo' || (filtro === 'titulo' ? !e.kind : filtro === 'elemento' ? e.kind && !['escena', 'frase', 'sticker'].includes(e.kind) : e.kind === filtro);
-    const op = [['todo', 'Todo'], ['titulo', 'Títulos'], ['escena', 'Escenas'], ['sticker', 'Stickers'], ['elemento', 'Elementos']];
+    const pasa = (e) => filtro === 'todo' || (filtro === 'titulo' ? !e.kind : filtro === 'elemento' ? e.kind && !['escena', 'frase', 'sticker', 'clip'].includes(e.kind) : e.kind === filtro);
+    const op = [['todo', 'Todo'], ['titulo', 'Títulos'], ['escena', 'Escenas'], ['sticker', 'Stickers'], ['clip', 'B-roll'], ['elemento', 'Elementos']];
     if (esVoz()) op.splice(1, 0, ['frase', 'Frases']);
     const lista = todas.filter(pasa);
     return [h('section', { class: 'card' }, h('h2', {}, `Todo lo que hay en tu video (${todas.length})`),
@@ -2284,6 +2299,51 @@ Lo que necesito de ti:
       lista.length ? h('ul', { class: 'evs' }, lista.map(capa)) : h('p', { class: 'hint' }, 'Todavía no hay nada de este tipo. Agrégalo desde Elementos.'))];
   }
   const TRANS = [['fade', 'Desvanecido'], ['cruce', 'Cruzado largo'], ['barrido', 'Barrido'], ['zoom', 'Corte con zoom']];
+  // ----- B-roll: videos e imágenes extra sobre tu video -----
+  function subirBroll(file, alTerminar) {
+    if (!/\.(mp4|mov|m4v|webm|png|jpe?g|webp)$/i.test(file.name)) return toast('Sirven videos mp4, mov, webm e imágenes png, jpg, webp.');
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api${A}/broll/subir?nombre=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) toast(`Subiendo ${file.name}... ${Math.round((e.loaded / e.total) * 100)}%`); };
+    xhr.onload = async () => {
+      let r = {}; try { r = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status === 200 && r.nombre) { BROLLS = await api(A + '/broll').catch(() => BROLLS); alTerminar(r.nombre); } else toast(r.error || `No pude subir el archivo (error ${xhr.status}).`);
+    };
+    xhr.onerror = () => toast('No pude subir el archivo. Revisa que el Estudio siga abierto.');
+    xhr.send(file);
+  }
+  const esVideoBroll = (n) => /\.(mp4|mov|m4v|webm)$/i.test(n || '');
+  function seccionBroll() {
+    const input = h('input', { type: 'file', accept: '.mp4,.mov,.m4v,.webm,.png,.jpg,.jpeg,.webp,video/*,image/*', hidden: true, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) subirBroll(f, (n) => agregarClip(n)); } });
+    function agregarClip(archivo) {
+      const t = +tiempoActual().toFixed(2);
+      const poner = (dur) => {
+        const ev = { id: 'b' + Date.now().toString(36), kind: 'clip', archivo, start: t, end: +(t + Math.min(Math.max(dur, 1), 4)).toFixed(2), desde: 0, modo: 'pantalla', x: 0.5, y: 0.3, ancho: 0.5, pos: 'centro', text: archivo, sfx: 'none' };
+        plan().events.push(ev); S.abiertos.add(ev.id); refrescar(); toast(`Agregué "${archivo}" en el segundo ${t}. Ajústalo en la línea de tiempo.`);
+      };
+      if (!esVideoBroll(archivo)) return poner(3);
+      const v = document.createElement('video'); v.preload = 'metadata'; v.src = `/api${A}/broll/${encodeURIComponent(archivo)}`;
+      v.onloadedmetadata = () => poner(v.duration || 3); v.onerror = () => poner(3);
+    }
+    const n = plan().events.filter((e) => e.kind === 'clip').length;
+    return h('section', { class: 'card' }, h('h2', {}, 'B-roll: videos e imágenes extra'),
+      h('p', { class: 'sub' }, 'Sube un video o una imagen y ponlo sobre el tuyo: a pantalla completa (tu voz sigue sonando) o en una ventana pequeña. Se ve igual al exportar. El sonido del B-roll no se usa.'),
+      BROLLS.length ? h('div', { class: 'chips stk' }, BROLLS.map((f) => h('button', { type: 'button', class: 'chip stk-i', title: `Agregar ${f.nombre} en este momento`, onclick: () => agregarClip(f.nombre) },
+        f.video ? h('video', { src: `/api${A}/broll/${encodeURIComponent(f.nombre)}#t=0.5`, muted: true, preload: 'metadata', playsinline: true }) : h('img', { src: `/api${A}/broll/${encodeURIComponent(f.nombre)}`, alt: f.nombre, loading: 'lazy' })))) : null,
+      h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn gold', onclick: () => input.click(), html: icon('plus') + ' Subir video o imagen y agregarlo' }), input),
+      n ? h('small', { class: 'hint' }, `Tienes ${n} en el video. Edítalos en Todas mis capas o toca el bloque en la línea de tiempo.`) : null);
+  }
+  function cuerpoClip(ev) {
+    return [bloqueTiempos(ev),
+      h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Archivo'), h('select', { onchange: (e) => { ev.archivo = e.target.value; ev.text = ev.archivo; ev.desde = 0; refrescar(); } },
+        BROLLS.map((f) => h('option', { value: f.nombre, selected: f.nombre === ev.archivo }, f.nombre)))),
+      seg('Cómo se ve', [['pantalla', 'Pantalla completa'], ['ventana', 'En una ventana']], ev.modo || 'pantalla', (v) => { ev.modo = v; refrescar(); }),
+      esVideoBroll(ev.archivo) ? h('label', { class: 'mini-f' }, 'Empezar el clip en el segundo', h('input', { type: 'number', step: '0.1', min: 0, value: ev.desde || 0, onchange: (e) => { ev.desde = Math.max(0, +e.target.value); cambio(); } })) : null,
+      ev.modo === 'ventana' ? slider('Tamaño de la ventana', 0.15, 1, 0.01, ev.ancho ?? 0.5, (v) => `${Math.round(v * 100)}% del ancho`, (v) => { ev.ancho = v; cambio(); }, 0.5) : null,
+      ev.modo === 'ventana' ? slider('Posición a lo ancho', 0, 1, 0.01, ev.x ?? 0.5, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.5) : null,
+      ev.modo === 'ventana' ? slider('Posición a lo alto', 0, 1, 0.01, ev.y ?? 0.3, (v) => `${Math.round(v * 100)}%`, (v) => { ev.y = v; cambio(); }, 0.3) : null];
+  }
   function seccionSticker() {
     const input = h('input', { type: 'file', accept: '.png,.webp,.jpg,.jpeg,image/*', hidden: true, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) subirSticker(f, (n) => { agregarSticker(n, false); }); } });
     const agregarSticker = (archivo, fija) => {
@@ -2319,7 +2379,7 @@ Lo que necesito de ti:
   function panelElementos() {
     const E = S.esp || (S.esp = { ...ESP_DEF });
     const k = KINDS[E.tipo];
-    const especiales = plan().events.filter((e) => e.kind && !['escena', 'frase', 'sticker'].includes(e.kind)).sort((a, b) => a.start - b.start);
+    const especiales = plan().events.filter((e) => e.kind && !['escena', 'frase', 'sticker', 'clip'].includes(e.kind)).sort((a, b) => a.start - b.start);
     const agregar = () => {
       const items = E.texto.split('\n').map((x) => x.trim()).filter(Boolean);
       if (E.tipo !== 'punto' && !items.length) return toast('Escribe al menos una línea.');
@@ -2331,6 +2391,7 @@ Lo que necesito de ti:
     const filaEsp = (ev) => capa(ev);
     return [
       seccionEscena(),
+      seccionBroll(),
       seccionSticker(),
       h('section', { class: 'card' }, h('h2', {}, 'Agregar un elemento'),
         h('p', { class: 'sub' }, 'Se agrega en el momento del video que estás viendo. Después ajustas tiempos y contenido en la lista de abajo.'),

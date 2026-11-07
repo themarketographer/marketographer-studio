@@ -37,8 +37,9 @@ export function cuerpoPropiedades(sel, ctx) {
   if (!ref.kind) { abrirTitulo(ref.id); cuerpo = [h('ul', { class: 'evs' }, filaTitulo(ref))]; }
   else if (ref.kind === 'frase') cuerpo = cuerpoFrase(ref);
   else if (ref.kind === 'sticker') cuerpo = cuerpoSticker(ref);
+  else if (ref.kind === 'clip') cuerpo = ctx.cuerpoClip(ref);
   else if (ref.kind === 'escena') cuerpo = cuerpoEscena(ref);
   else cuerpo = cuerpoEspecial(ref);
-  const opac = ref.kind === 'sticker' ? null : slider('Opacidad', 0.1, 1, 0.01, ref.opacidad ?? 1, (v) => `${Math.round(v * 100)}%`, (v) => { ref.opacidad = v >= 0.995 ? undefined : v; if (ref.opacidad === undefined) delete ref.opacidad; cambio(); }, 1);
+  const opac = ref.kind === 'sticker' || ref.kind === 'clip' ? null : slider('Opacidad', 0.1, 1, 0.01, ref.opacidad ?? 1, (v) => `${Math.round(v * 100)}%`, (v) => { ref.opacidad = v >= 0.995 ? undefined : v; if (ref.opacidad === undefined) delete ref.opacidad; cambio(); }, 1);
   return [ref.fija ? null : tiempo, opac ? card(opac) : null, card(h('h2', {}, 'Ajustes'), ...cuerpo)];
 }

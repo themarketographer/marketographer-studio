@@ -734,6 +734,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     colors = {"accent": hex_rgb(style["accent"]), "text": hex_rgb(style["text"])}
     sprites = {}
     graf.ESCENAS = proj.parent.parent / "escenas"
+    graf.BROLL = proj.parent.parent / "broll"
     for ev in events:
         if ev.get("kind") in graf.TIPOS:
             sprites[ev["id"]] = graf.preparar(ev, style, W, H, colors)
@@ -887,7 +888,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             out = peli.global_(out, a)
             out = apply_vig(out)
         s_prev = s
-        for e in sorted(front, key=lambda x: x.get("kind") != "seccion"):  # el velo de una sección va debajo de lo demás
+        for e in sorted(front, key=lambda x: not (x.get("kind") == "seccion" or (x.get("kind") == "clip" and x.get("modo") != "ventana"))):  # lo que cubre la pantalla (velo de sección, B-roll a pantalla completa) va debajo de lo demás
             if e.get("kind") == "punto":
                 continue
             if e.get("kind") in graf.TIPOS:
@@ -1001,7 +1002,7 @@ def evitar_solapes(events, sprites, style, H):
             fl = {"S": 0.045, "M": 0.06, "L": 0.075, "XL": 0.09}.get(e.get("size", "M"), 0.06)
             fijos.append({"e": e, "h": fl * 0.7 * 1.12 + 0.032, "c": (float(e["y"]) if e.get("y") is not None else 0.45) - 0.12})
             continue
-        if e.get("kind") in ("punto", "escena", "frase", "sticker", "seccion"):
+        if e.get("kind") in ("punto", "escena", "frase", "sticker", "seccion", "clip"):
             continue
         alto, off = _alto_y(e, sprites[e["id"]], H)
         manual = e.get("y") is not None

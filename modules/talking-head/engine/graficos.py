@@ -7,7 +7,8 @@ import cv2
 import numpy as np
 import render as R
 
-NUEVOS = ("rotulo", "llamada", "etiqueta", "seccion")  # gráficos esenciales
+NUEVOS = ("rotulo", "llamada", "etiqueta", "seccion", "clip")  # gráficos esenciales y B-roll
+BROLL = None  # carpeta con los videos e imágenes de B-roll (la fija render.py)
 TIPOS = ("lista", "conexion", "numero", "barras", "punto", "escena", "frase", "sticker") + NUEVOS
 ESCENAS = None  # carpeta con las imágenes de las escenas (la fija render.py)
 _EMOJI_FUENTES = [("/System/Library/Fonts/Apple Color Emoji.ttc", 160), ("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 109),
@@ -594,6 +595,8 @@ def _ancho(texto, pxf, style, W, H):
 
 
 def _preparar_nuevo(ev, style, W, H, colors):
+    if ev["kind"] == "clip":
+        return {"ruta": str(BROLL / str(ev.get("archivo", ""))) if BROLL else "", "cap": None, "idx": -9, "frame": None, "fps": 30.0, "n": 0, "img": None, "ok": True}
     k, its, f = ev["kind"], _lineas(ev), _factor(ev)
     oscuro = {**colors, "text": _sobre(colors["accent"])}
     acento = "accent" if _lum(colors["accent"]) >= 90 else "text"  # un acento muy oscuro no se lee sobre fondo oscuro
@@ -623,6 +626,8 @@ def _caja(dst, x0, y0, x1, y1, r, bgr, alpha):
 
 
 def _dibujar_nuevo(dst, ev, obj, t, W, H, colors):
+    if ev["kind"] == "clip":
+        return _dibujar_clip(dst, ev, obj, t, W, H)
     k, d = ev["kind"], t - ev["start"]
     alpha = R.clamp(d / 0.2) * R.clamp((ev["end"] - t) / 0.25)
     if alpha <= 0.01:
@@ -686,3 +691,68 @@ def _dibujar_nuevo(dst, ev, obj, t, W, H, colors):
             _blit_scaled(dst, obj["t"], W / 2, H * (yy + 0.07) + rise, ta)
         else:
             _blit_scaled(dst, obj["t"], W / 2, H * yy + rise, ta)
+
+
+# ---------- B-roll: video o imagen extra encima del tuyo (mismas reglas que live.js) ----------
+def _cuadro_clip(ev, obj, d):
+    """El cuadro del clip que toca en el instante d desde que empieza (los videos se leen seguidos; si hay salto, se busca)."""
+    ruta = obj["ruta"]
+    if not obj["ok"] or not ruta:
+        return None
+    if not re.search(r"\.(mp4|mov|m4v|webm)$", ruta, re.I):
+        if obj["img"] is None:
+            obj["img"] = cv2.imread(ruta)
+            obj["ok"] = obj["img"] is not None
+        return obj["img"]
+    if obj["cap"] is None:
+        obj["cap"] = cv2.VideoCapture(ruta)
+        obj["fps"] = obj["cap"].get(cv2.CAP_PROP_FPS) or 30.0
+        obj["n"] = int(obj["cap"].get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        obj["ok"] = obj["cap"].isOpened()
+        if not obj["ok"]:
+            return None
+    idx = int((float(ev.get("desde", 0)) + d) * obj["fps"])
+    if obj["n"] > 0:
+        idx = min(idx, obj["n"] - 2)  # se queda en el último cuadro
+    idx = max(idx, 0)
+    if idx != obj["idx"]:
+        if idx != obj["idx"] + 1:
+            obj["cap"].set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ok, fr = obj["cap"].read()
+        if ok:
+            obj["frame"], obj["idx"] = fr, idx
+    return obj["frame"]
+
+
+def _dibujar_clip(dst, ev, obj, t, W, H):
+    d, tail = t - ev["start"], ev["end"] - t
+    if d < 0 or tail <= 0:
+        return
+    al = R.clamp(d / 0.2) * R.clamp(tail / 0.25)
+    if al <= 0.01:
+        return
+    fr = _cuadro_clip(ev, obj, d)
+    if fr is None:
+        return
+    fh, fw = fr.shape[:2]
+    if ev.get("modo") == "ventana":
+        w = max(int(round(max(float(ev.get("ancho", 0.5)), 0.05) * W)), 8)
+        h = max(int(round(w * fh / fw)), 8)
+        img = cv2.resize(fr, (w, h), interpolation=cv2.INTER_AREA if w < fw else cv2.INTER_LINEAR)
+        x0, y0 = int(round(W * float(ev.get("x", 0.5)) - w / 2)), int(round(H * float(ev.get("y", 0.3)) - h / 2))
+        from PIL import Image, ImageDraw
+        m = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(m).rounded_rectangle((0, 0, w - 1, h - 1), radius=int(min(w, h) * 0.06), fill=255)
+        mask = np.asarray(m, np.float32) / 255.0 * al
+        X0, Y0, X1, Y1 = max(x0, 0), max(y0, 0), min(x0 + w, W), min(y0 + h, H)
+        if X1 <= X0 or Y1 <= Y0:
+            return
+        a = mask[Y0 - y0:Y1 - y0, X0 - x0:X1 - x0, None]
+        roi = dst[Y0:Y1, X0:X1].astype(np.float32)
+        dst[Y0:Y1, X0:X1] = (roi * (1 - a) + img[Y0 - y0:Y1 - y0, X0 - x0:X1 - x0].astype(np.float32) * a).astype(np.uint8)
+    else:
+        sc = max(W / fw, H / fh)
+        nw, nh = max(int(round(fw * sc)), W), max(int(round(fh * sc)), H)
+        img = cv2.resize(fr, (nw, nh), interpolation=cv2.INTER_AREA if sc < 1 else cv2.INTER_LINEAR)
+        x0, y0 = (nw - W) // 2, (nh - H) // 2
+        cv2.addWeighted(dst, 1 - al, img[y0:y0 + H, x0:x0 + W], al, 0, dst)

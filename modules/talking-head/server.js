@@ -194,6 +194,21 @@ export default async function register({ route, config }) {
   route.get('/escenas/:archivo', ({ params }) => ({ __file: path.join(escDir, limpio(params.archivo)), type: /\.png$/i.test(params.archivo) ? 'image/png' : /\.webp$/i.test(params.archivo) ? 'image/webp' : 'image/jpeg' }));
   route.delete('/escenas/:archivo', ({ params }) => { fs.rmSync(path.join(escDir, limpio(params.archivo)), { force: true }); });
 
+  // B-roll: videos e imágenes extra para poner sobre tu video (carpeta data/broll). En el plan se nombran por archivo.
+  const brollDir = path.join(config.root, 'data', 'broll');
+  fs.mkdirSync(brollDir, { recursive: true });
+  const VID = /\.(mp4|mov|m4v|webm)$/i, MEDIA = /\.(mp4|mov|m4v|webm|png|jpe?g|webp)$/i;
+  const tipoBroll = (n) => (/\.png$/i.test(n) ? 'image/png' : /\.webp$/i.test(n) ? 'image/webp' : /\.jpe?g$/i.test(n) ? 'image/jpeg' : /\.webm$/i.test(n) ? 'video/webm' : /\.mov$/i.test(n) ? 'video/quicktime' : 'video/mp4');
+  route.get('/broll', () => fs.readdirSync(brollDir).filter((f) => MEDIA.test(f)).sort().map((nombre) => ({ nombre, video: VID.test(nombre), mb: Math.round(fs.statSync(path.join(brollDir, nombre)).size / 1e5) / 10 })));
+  route.post('/broll/subir', async ({ query, stream }) => {
+    const nombre = limpio(query.nombre);
+    if (!MEDIA.test(nombre)) throw new Error('Sube un video (mp4, mov, webm) o una imagen (png, jpg, webp).');
+    await pipeline(stream, fs.createWriteStream(path.join(brollDir, nombre)));
+    return { nombre };
+  });
+  route.get('/broll/:archivo', ({ params }) => ({ __file: path.join(brollDir, limpio(params.archivo)), type: tipoBroll(params.archivo) }));
+  route.delete('/broll/:archivo', ({ params }) => { fs.rmSync(path.join(brollDir, limpio(params.archivo)), { force: true }); });
+
   // Looks propios: el estilo completo con un nombre, guardado en data/looks.json.
   const looksFile = path.join(config.root, 'data', 'looks.json');
   const leerLooks = () => { try { return JSON.parse(fs.readFileSync(looksFile, 'utf8')); } catch { return []; } };

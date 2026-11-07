@@ -78,7 +78,7 @@ export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, get
     const seg = (a, b) => `de ${R2(a).toString().replace('.', ',')} a ${R2(b).toString().replace('.', ',')} segundos`;
     for (const e of P.events || []) {
       if (!e.kind || e.kind === 'frase') kids.push(bloque('lt-tit', e.start, e.end, 22, 32, nm(e), e, 'evento', `Título ${nm(e)}, ${seg(e.start, e.end)}`));
-      else { const n = (kinds[e.kind] && kinds[e.kind].n) || e.kind; kids.push(bloque('lt-esp', e.start, e.end, 56, 32, n, e, 'evento', `${n}, ${seg(e.start, e.end)}`)); }
+      else { const n = e.kind === 'clip' ? `B-roll ${e.archivo || ''}` : (kinds[e.kind] && kinds[e.kind].n) || e.kind; kids.push(bloque(e.kind === 'clip' ? 'lt-esp lt-clip' : 'lt-esp', e.start, e.end, 56, 32, n, e, 'evento', `${n}, ${seg(e.start, e.end)}`)); }
       if (e.sfx && e.sfx !== 'none') kids.push(h('i', { class: 'lt-nota', title: `Sonido ${e.sfx}`, style: `left:${xDe(e.start) - 5}px;top:224px` }, '♪'));
     }
     const m = P.audio && P.audio.musica;
