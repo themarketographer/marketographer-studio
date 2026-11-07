@@ -598,7 +598,12 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   function guardarPlan() {
     clearTimeout(S.guardar);
     marcarCambios();
-    S.guardar = setTimeout(() => api(`${A}/proyectos/${S.p.id}/plan`, { method: 'PUT', body: plan() }).catch(() => toast('No pude guardar los cambios.')), 400);
+    estadoGuardado('Guardando…');
+    S.guardar = setTimeout(() => api(`${A}/proyectos/${S.p.id}/plan`, { method: 'PUT', body: plan() }).then(() => estadoGuardado('Guardado ✓')).catch(() => { estadoGuardado('Sin guardar'); toast('No pude guardar los cambios.'); }), 400);
+  }
+  function estadoGuardado(t) {
+    const el = document.getElementById('th-guardado'); if (!el) return;
+    el.textContent = t; el.classList.toggle('error', t === 'Sin guardar'); el.classList.toggle('ocupado', t.startsWith('Guardando'));
   }
   function marcarCambios() { const el = document.getElementById('th-dirty'); if (el) el.hidden = !S.dirty || S.tab === 'live'; }
   const ordenar = () => plan().events.sort((a, b) => a.start - b.start).filter((e) => !e.kind);
@@ -690,12 +695,22 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
   function pintar() {
     const p = S.p;
-    const cab = h('div', { class: 'row-between' },
+    const menuMas = h('div', { class: 'menu-pop', hidden: true, role: 'menu' },
+      h('button', { type: 'button', role: 'menuitem', class: 'menu-it', onclick: async () => { cerrarMenu(); const r = await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); abrir(r.id); }, html: ic('copiar', 16) + ' Hacer una copia' }),
+      h('hr', { class: 'menu-sep' }),
+      h('button', { type: 'button', role: 'menuitem', class: 'menu-it peligro', onclick: async () => { cerrarMenu(); if (confirm(`¿Borrar «${p.nombre}»?\nSe pierden su video, sus ajustes y lo que exportaste. No se puede deshacer.`)) { await api(`${A}/proyectos/${p.id}`, { method: 'DELETE' }); inicio(); } }, html: icon('trash') + ' Borrar este proyecto' }));
+    const cerrarMenu = () => { menuMas.hidden = true; document.removeEventListener('pointerdown', fueraMenu, true); document.removeEventListener('keydown', escMenu, true); };
+    const fueraMenu = (e) => { if (!menuMas.parentElement.contains(e.target)) cerrarMenu(); };
+    const escMenu = (e) => { if (e.key === 'Escape') cerrarMenu(); };
+    const cab = h('div', { class: 'row-between cab-proy' },
       h('button', { class: 'btn ghost sm', onclick: inicio, html: ic('izq', 16) + ' Proyectos' }),
       h('div', { class: 'row-gap' },
+        h('span', { id: 'th-guardado', class: 'guardado', role: 'status', 'aria-live': 'polite' }, ''),
         h('button', { class: 'btn ghost sm', onclick: () => abrirHoja('ajustes'), html: ic('ajustes', 16) + ' Ajustes' }),
-        h('button', { class: 'btn ghost sm', title: 'Hacer una copia para probar otra versión', onclick: async () => { const r = await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); abrir(r.id); }, html: ic('copiar', 16) + ' Duplicar' }),
-        h('button', { class: 'btn danger sm', onclick: async () => { if (confirm('¿Borrar este proyecto y sus videos?')) { await api(`${A}/proyectos/${p.id}`, { method: 'DELETE' }); inicio(); } }, html: icon('trash') + ' Borrar' })));
+        h('div', { class: 'menu-wrap' },
+          h('button', { class: 'btn ghost sm', 'aria-haspopup': 'menu', 'aria-label': 'Más acciones del proyecto', title: 'Más acciones', onclick: () => { if (menuMas.hidden) { menuMas.hidden = false; document.addEventListener('pointerdown', fueraMenu, true); document.addEventListener('keydown', escMenu, true); } else cerrarMenu(); }, html: '⋯' }),
+          menuMas),
+        p.analizado ? h('button', { class: 'btn gold', id: 'th-exportar', disabled: !!p.corriendo, title: 'Elegir formatos y exportar', onclick: () => abrirHoja('exportar'), html: icon('check') + (p.corriendo ? ' Trabajando…' : ' Exportar') }) : null));
     const titulo = h('div', { class: 'page-head' }, h('h1', {}, p.nombre));
     if (p.corriendo) return root.replaceChildren(cab, titulo, progreso()), actualizarProgreso();
     if (!p.analizado) {
@@ -771,17 +786,19 @@ export async function mount(root, { api: api0, toast, h, icon }) {
 
   // Mantén pulsado para ver el video sin efectos (o la tecla B).
   function botonAntes() {
-    const b = h('button', { type: 'button', class: 'btn ghost sm btn-antes', title: 'Mantén pulsado para ver cómo se grabó, sin ningún efecto. También sirve la tecla B.', 'aria-label': 'Mantén pulsado para ver el antes', html: ic('ojo', 15) + '<span>Mantén para ver el antes</span>' });
-    const on = (v) => { if (live) live.antes(v); b.classList.toggle('activo', v); };
-    b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture?.(e.pointerId); } catch { /* sin puntero activo */ } on(true); });
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => on(false));
-    b.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); on(true); } });
-    b.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') on(false); });
+    const bA = h('button', { type: 'button', class: 'seg-b', role: 'radio', 'aria-checked': 'false', title: 'Cómo se grabó, sin ningún efecto. También sirve mantener la tecla B.' }, 'Antes');
+    const bD = h('button', { type: 'button', class: 'seg-b on', role: 'radio', 'aria-checked': 'true', title: 'Con todos tus ajustes' }, 'Después');
+    const caja = h('div', { class: 'antes-despues', role: 'radiogroup', 'aria-label': 'Ver antes o después' }, bA, bD);
+    let fijo = false;
+    const pintarSeg = (v) => { bA.classList.toggle('on', v); bD.classList.toggle('on', !v); bA.setAttribute('aria-checked', String(v)); bD.setAttribute('aria-checked', String(!v)); };
+    const on = (v) => { if (live) live.antes(v); pintarSeg(v); };
+    bA.addEventListener('click', () => { fijo = true; on(true); });
+    bD.addEventListener('click', () => { fijo = false; on(false); });
     if (antesTecla) { document.removeEventListener('keydown', antesTecla.d); document.removeEventListener('keyup', antesTecla.u); }
     const tipeando = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
-    antesTecla = { d: (e) => { if ((e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.repeat && !tipeando(e)) on(true); }, u: (e) => { if (e.key === 'b' || e.key === 'B') on(false); } };
+    antesTecla = { d: (e) => { if ((e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.repeat && !tipeando(e)) on(true); }, u: (e) => { if ((e.key === 'b' || e.key === 'B') && !fijo) on(false); } };
     document.addEventListener('keydown', antesTecla.d); document.addEventListener('keyup', antesTecla.u);
-    return b;
+    return caja;
   }
   let antesTecla = null;
   function verResultado(tipo) {
@@ -828,21 +845,17 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('div', { class: 'vbar' },
         S.tab === 'live' ? botonAntes() : h('span', {}),
         h('div', { class: 'vtools' },
+          h('div', { class: 'ib-grupo', role: 'group', 'aria-label': 'Deshacer y rehacer' },
+          h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', 16) }),
+          h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', 16) })),
+          h('div', { class: 'ib-grupo', role: 'group', 'aria-label': 'Vista' },
           h('button', { type: 'button', class: 'ib' + (S.vista === 'grande' ? ' on' : ''), title: 'Video más grande', 'aria-label': 'Video más grande', 'aria-pressed': String(S.vista === 'grande'), onclick: () => cambiarVista(S.vista === 'grande' ? 'normal' : 'grande'), html: ic('zoom', 16) }),
           S.tab === 'live' ? h('button', { type: 'button', class: 'ib med-btn' + (medidor ? ' on' : ''), title: 'Medidor de sonido', 'aria-label': 'Medidor de sonido', 'aria-pressed': String(!!medidor), onclick: () => { try { localStorage.setItem('estudio.medidor', medidorOn ? '0' : '1'); } catch { /* sin memoria */ } pintar(); }, html: ic('onda', 16) }) : null,
-          h('button', { type: 'button', class: 'ib' + (S.vista === 'solo' ? ' on' : ''), title: 'Ocultar los ajustes y ver solo el video', 'aria-label': 'Ocultar los ajustes', 'aria-pressed': String(S.vista === 'solo'), onclick: () => cambiarVista(S.vista === 'solo' ? 'normal' : 'solo'), html: ic('ojo', 16) }),
-          h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', 16) }),
-          h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', 16) }))),
+          h('button', { type: 'button', class: 'ib' + (S.vista === 'solo' ? ' on' : ''), title: 'Ocultar los ajustes y ver solo el video', 'aria-label': 'Ocultar los ajustes', 'aria-pressed': String(S.vista === 'solo'), onclick: () => cambiarVista(S.vista === 'solo' ? 'normal' : 'solo'), html: ic('ojo', 16) })))),
       pantallaYMedidor,
       lineaEl,
-      S.tab === 'live' ? h('p', { class: 'hint center-t' }, 'Arrastra un texto del video para moverlo. Espacio reproduce, las flechas avanzan.') : null,
-      fmP && fmP !== '9x16' ? null : seg('Zona segura', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => { S.zona = v; const z = zonaSegura(v); phone.querySelector('.zona')?.remove(); if (z) phone.append(z); document.querySelectorAll('.col-video .seg-b').forEach((b) => { b.classList.toggle('on', b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v])); b.setAttribute('aria-checked', String(b.classList.contains('on'))); }); }),
-      h('p', { id: 'th-dirty', class: 'dirty', hidden: true }, ''),
-      h('div', { class: 'actions col sticky-ex' },
-        h('button', { class: 'btn gold', onclick: () => lanzar('renderizar', { calidad: 'final' }, true), html: icon('check') + ` Exportar video ${etqSalida(S.p.plan)}` }),
-        p.tieneFinal ? h('button', { class: 'btn ghost', onclick: () => verResultado('final'), html: ic('pelicula', 16) + ' Ver el último video exportado' }) : null,
-        h('button', { class: 'btn ghost', onclick: () => abrirHoja('exportar'), html: ic('descargar', 16) + ' Más formatos' }),
-        h('p', { class: 'sub ex-nota' }, 'Lo que ves arriba es el video tal como saldrá, con tus ajustes, sonidos y música, y se actualiza al instante.')));
+      fmP && fmP !== '9x16' ? null : seg('Guías de redes', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => { S.zona = v; const z = zonaSegura(v); phone.querySelector('.zona')?.remove(); if (z) phone.append(z); document.querySelectorAll('.col-video .seg-b').forEach((b) => { b.classList.toggle('on', b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v])); b.setAttribute('aria-checked', String(b.classList.contains('on'))); }); }),
+      h('p', { id: 'th-dirty', class: 'dirty', hidden: true }, ''))
   }
   // ---------- línea de tiempo: títulos, zooms, cámara lenta y cortes de un vistazo ----------
   function pintarLinea() {
@@ -874,7 +887,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const nFra = P.events.filter((e) => e.kind === 'frase').length, nEsp = P.events.filter((e) => e.kind && e.kind !== 'frase').length, nTit = P.events.filter((e) => !e.kind).length;
     const lentos = (P.lentos || []).length;
     return [
-      { id: 'capas', n: 'Todas mis capas', r: P.events.length ? `${P.events.length} elementos, todos editables` : 'Lo que agregues aparece aquí' },
+      { id: 'capas', n: 'Todas mis capas', r: P.events.length ? `${P.events.length} elementos` : 'Lo que agregues aparece aquí' },
       { id: 'frases', n: 'Frases animadas', r: nFra ? `${nFra} frases · ${(P.voz && P.voz.secuencia === 'unico') ? 'misma animación' : 'una distinta en cada frase'}` : 'Texto que se arma con tu voz' },
       { id: 'titulos', n: 'Palabras grandes', sw: [st.titulos, (v) => { st.titulos = v; }], r: st.titulos ? `${nTit} palabras enormes · ${nombreFuente(st.font)}` : 'Apagadas' },
       { id: 'subs', n: 'Subtítulos', sw: [sb.on, (v) => { sb.on = v; }], r: sb.on ? `Texto de abajo · ${nombreFuente(sb.font)} · ${sb.maxPal} por bloque` : 'Apagados' },
@@ -928,7 +941,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('i', { class: 'paso-barra', 'aria-hidden': 'true' }));
     const col = h('div', { class: 'col-set' }, nav,
       h('div', { class: 'paso', key: P.id },
-        h('div', { class: 'paso-head' }, h('h2', {}, P.n), h('p', { class: 'sub' }, P.nota)),
+        h('div', { class: 'paso-head' }, h('h2', {}, P.n)),
         P.inline ? inlineEl : tilesEl),
       h('div', { class: 'paso-pie' },
         ant ? h('button', { type: 'button', class: 'btn ghost', onclick: () => irPaso(ant.id), html: ic('izq', 16) + ` ${ant.n}` }) : h('span'),
@@ -973,7 +986,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     cierre: ['Tarjeta final', 'El cierre con tu llamado a la acción.', () => panelCierre()],
     publicar: ['Portada y caption', 'Todo lo que necesitas para publicar.', () => panelPublicar()],
     propiedades: ['Propiedades', 'Los ajustes de lo que elegiste en la línea de tiempo.', () => cuerpoPropiedades(S.selTL, { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, cuerpoClip, abrirTitulo: (id) => S.abiertos.add(id) })],
-    exportar: ['Exportar', 'Elige para dónde es el video. Se arma una vez y sale en todos los formatos que quieras.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
+    exportar: ['Exportar', 'Elige para dónde es el video.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, verUltimo: () => { cerrarHoja(); verResultado('final'); }, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
     ajustes: ['Ajustes', 'Se guardan en este navegador y valen para todos tus videos.', () => panelAjustes()],
   };
   function abrirHoja(id) {
@@ -1008,7 +1021,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const nav = S.p && S.p.plan && S.panel !== 'ajustes' ? h('nav', { class: 'hoja-nav', 'aria-label': 'Ir a otra tarjeta' }, tarjetasVisibles().map((t) => h('button', { type: 'button', class: 'chip' + (t.id === S.panel ? ' on' : ''), 'aria-pressed': String(t.id === S.panel), onclick: () => abrirHoja(t.id), html: `${ic(t.id, 14)}<span>${t.n}</span>` }))) : null;
     const hoja = h('aside', { class: 'hoja', role: 'dialog', 'aria-label': titulo, onkeydown: (e) => { if (e.key === 'Escape') cerrarHoja(); } },
       h('div', { class: 'hoja-head' }, h('div', {}, h('h2', {}, titulo), h('p', { class: 'sub' }, nota)), cerrar),
-      nav, panelEl, h('p', { class: 'hint hoja-foot' }, S.panel === 'ajustes' ? 'Se guarda solo, en este navegador.' : 'Se guarda solo. Los cambios ya se ven en el video.'));
+      nav, panelEl);
     const wsEd = document.querySelector('.ed.ws');
     if (wsEd) wsEd.append(hoja); else root.append(fondo, hoja);  // en pantalla ancha la tarjeta queda acoplada junto al video, sin tapar nada
     document.querySelector('.ed')?.classList.add('con-hoja');
