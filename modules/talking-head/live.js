@@ -837,7 +837,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
 
   // ---------- sonido en vivo: efectos y música (la mezcla final se oye exacta en la vista previa generada) ----------
   const GSFX = { click: 0.5, pop: 0.45, whoosh: 0.4, tick: 0.5, ding: 0.4 };
-  let ac = null, tAud = -1, musEl = null, musVol = 0, volSfx = 1, ganSfx = {};
+  let ac = null, master = null, tAud = -1, musEl = null, musVol = 0, volSfx = 1, ganSfx = {};
   const bufs = {};
   async function cargarSfx(n) {
     if (!ac || !sfxBase || bufs[n] !== undefined) return;
@@ -848,7 +848,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!ac || !(n.startsWith('u:') || GSFX[n])) return;
     const b = bufs[n]; if (!b) { cargarSfx(n); return; }
     const src = ac.createBufferSource(), g = ac.createGain(); src.buffer = b; g.gain.value = Math.min((n.startsWith('u:') ? 0.5 : GSFX[n]) * 1.5 * volSfx * Number(ganSfx[n] ?? 1), 2);
-    src.connect(g); g.connect(ac.destination); src.start();
+    src.connect(g); g.connect(master || ac.destination); src.start();
   }
   // Voz mejorada en vivo: filtro de graves, compresor, nivelado y una compuerta contra el ruido de fondo (aproximación de la mezcla final)
   let voz = null;
@@ -856,7 +856,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     try {
       const src = ac.createMediaElementSource(vs), hp = ac.createBiquadFilter(), comp = ac.createDynamicsCompressor(), gate = ac.createGain(), mk = ac.createGain(), an = ac.createAnalyser();
       hp.type = 'highpass'; an.fftSize = 1024;
-      src.connect(hp); hp.connect(an); hp.connect(comp); comp.connect(gate); gate.connect(mk); mk.connect(ac.destination);
+      src.connect(hp); hp.connect(an); hp.connect(comp); comp.connect(gate); gate.connect(mk); mk.connect(master || ac.destination);
       voz = { hp, comp, gate, mk, an, buf: new Float32Array(an.fftSize) };
     } catch { voz = { off: true }; }
   }
@@ -884,7 +884,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (vs.paused) { pararMusica(); return; }
     if (antes) { pararMusica(); if (ac && voz && !voz.off) aplicarVoz({ mejorar: false }); tAud = vs.currentTime; return; }
     const st = P.style, t = vs.currentTime;
-    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { ac = null; } }
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.connect(ac.destination); } catch { ac = null; master = null; } }
     if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
     if (ac && tAud >= 0 && t > tAud && t - tAud < 0.3 && st.sonidos) {
       if (st.titulos) for (const e of P.events || []) if (e.sfx && e.sfx !== 'none' && e.start > tAud && e.start <= t) sonar(e.sfx);
@@ -897,7 +897,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const M = P.audio && P.audio.musica;
     if (!M || !M.archivo || !musicUrl) { if (musEl) musEl.pause(); return; }
     const url = musicUrl(M.archivo);
-    if (!musEl || musEl.dataset.u !== url) { if (musEl) musEl.pause(); musEl = new Audio(url); musEl.dataset.u = url; musEl.loop = true; musVol = 0; }
+    if (!musEl || musEl.dataset.u !== url) { if (musEl) musEl.pause(); musEl = new Audio(url); musEl.dataset.u = url; musEl.loop = true; musVol = 0; try { ac.createMediaElementSource(musEl).connect(master); } catch { /* sin medidor para la música */ } }
     const want = Number(M.inicio || 0) + t;
     if (musEl.paused) { musEl.currentTime = want % (musEl.duration || 1e9); musEl.play().catch(() => {}); }
     else if (Math.abs(musEl.currentTime - want) > 1.2 && !(musEl.duration && want > musEl.duration)) musEl.currentTime = want;
@@ -984,11 +984,12 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   raf = requestAnimationFrame(bucle);
 
   return {
+    medidor: () => (master && ac ? { ac, master } : null),
     el, video: vs,
     redraw: () => { sucio = true; },
     antes: (v) => { antes = !!v; sucio = true; if (!v) tAud = -1; },
     ir: (t) => { vs.currentTime = t; va.currentTime = t; sucio = true; matteT = -1; },
     alternar,
-    destroy: () => { vivo = false; if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
+    destroy: () => { vivo = false; if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; master = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
   };
 }

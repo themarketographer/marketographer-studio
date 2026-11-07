@@ -1,5 +1,6 @@
 // Editor de Talking Head: sube un video, el motor propone títulos, subtítulos, zooms y sonidos, y tú ajustas con controles simples.
 import { hojaExportar } from './exportar-ui.js';
+import { crearMedidor } from './meter.js';
 const POS = [['detras', 'Detrás de ti'], ['arriba', 'Arriba'], ['centro', 'Centro'], ['abajo', 'Abajo']];
 const TAM = [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];
 const ANIM = [['pop', 'Rebote corto'], ['elastico', 'Elástico'], ['ruleta', 'Ruleta'], ['deslizar', 'Sube'], ['escribir', 'Se escribe'], ['fade', 'Aparece'], ['bajar', 'Baja'], ['crecer', 'Crece'], ['rebote', 'Rebote largo'], ['tiembla', 'Tiembla']];
@@ -231,7 +232,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   const A = '/talking-head';
   const S = { fuentes: [], motorListo: true, proyectos: [], p: null, tab: 'source', panel: null, poll: null, guardar: null, bust: Date.now(),
     dirty: false, sel: new Set(), abiertos: new Set(), zona: 'none', guion: null };
-  let video = null, panelEl = null, live = null, inlineEl = null, lineaEl = null, histTimer = null, tlTimer = null;
+  let video = null, panelEl = null, live = null, medidor = null, inlineEl = null, lineaEl = null, histTimer = null, tlTimer = null;
   S.aj = leerAjustes(); S.paso = 'recorte'; S.inline = null;
   try { S.vista = localStorage.getItem('estudio.vista') || 'normal'; } catch { S.vista = 'normal'; }
   const Hist = { pila: [], i: -1, ultimo: '' };
@@ -747,6 +748,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const p = S.p;
     if (S.tab === 'live' && !(p.plan && p.tieneAlpha)) S.tab = 'source';
     if (live) { live.destroy(); live = null; }
+    if (medidor) { medidor.destroy(); medidor = null; }
     let pantalla;
     if (S.tab === 'live') {
       live = crearLive({ onEdit: () => cambio(), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}` });
@@ -756,6 +758,9 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     }
     const fmP = S.tab !== 'source' && S.p.plan ? (S.p.plan.formato || '9x16') : null;
     const phone = h('div', { class: 'phone' + (fmP === '16x9' ? ' ancho' : ''), style: fmP ? `aspect-ratio: ${FMT_ASP[fmP]}` : '' }, pantalla, zonaSegura(fmP && fmP !== '9x16' ? 'none' : S.zona));
+    let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
+    if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
+    const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
     lineaEl = S.tab === 'live' ? h('div', { class: 'ltime', role: 'slider', 'aria-label': 'Línea de tiempo del video', tabindex: '0',
       onpointerdown: (e) => { const mover = (ev) => { const r = lineaEl.getBoundingClientRect(); const t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * plan().duration; if (live) live.ir(t); pintarCabeza(); }; mover(e); lineaEl.setPointerCapture(e.pointerId); lineaEl.onpointermove = mover; lineaEl.onpointerup = () => { lineaEl.onpointermove = null; }; } }) : null;
     clearInterval(tlTimer);
@@ -766,10 +771,11 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         S.tab === 'live' ? botonAntes() : h('span', {}),
         h('div', { class: 'vtools' },
           h('button', { type: 'button', class: 'ib' + (S.vista === 'grande' ? ' on' : ''), title: 'Video más grande', 'aria-label': 'Video más grande', 'aria-pressed': String(S.vista === 'grande'), onclick: () => cambiarVista(S.vista === 'grande' ? 'normal' : 'grande'), html: ic('zoom', 16) }),
+          S.tab === 'live' ? h('button', { type: 'button', class: 'ib med-btn' + (medidor ? ' on' : ''), title: 'Medidor de sonido', 'aria-label': 'Medidor de sonido', 'aria-pressed': String(!!medidor), onclick: () => { try { localStorage.setItem('estudio.medidor', medidorOn ? '0' : '1'); } catch { /* sin memoria */ } pintar(); }, html: ic('onda', 16) }) : null,
           h('button', { type: 'button', class: 'ib' + (S.vista === 'solo' ? ' on' : ''), title: 'Ocultar los ajustes y ver solo el video', 'aria-label': 'Ocultar los ajustes', 'aria-pressed': String(S.vista === 'solo'), onclick: () => cambiarVista(S.vista === 'solo' ? 'normal' : 'solo'), html: ic('ojo', 16) }),
           h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', 16) }),
           h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', 16) }))),
-      phone,
+      pantallaYMedidor,
       lineaEl,
       S.tab === 'live' ? h('p', { class: 'hint center-t' }, 'Arrastra un texto del video para moverlo. Espacio reproduce, las flechas avanzan.') : null,
       fmP && fmP !== '9x16' ? null : seg('Zona segura', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => { S.zona = v; const z = zonaSegura(v); phone.querySelector('.zona')?.remove(); if (z) phone.append(z); document.querySelectorAll('.col-video .seg-b').forEach((b) => { b.classList.toggle('on', b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v])); b.setAttribute('aria-checked', String(b.classList.contains('on'))); }); }),
