@@ -5,9 +5,9 @@ const mmss = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0'
 export function cuerpoPropiedades(sel, ctx) {
   const { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, abrirTitulo } = ctx;
   const P = plan(), dur = P.duration || 1, ref = sel && sel.ref;
-  const vive = sel && ({ evento: P.events, zoom: P.zooms, lento: P.lentos }[sel.tipo] || []).includes(ref);
+  const vive = sel && ({ evento: P.events, zoom: P.zooms, lento: P.lentos, filtro: P.filtros }[sel.tipo] || []).includes(ref);
   const card = (...k) => h('section', { class: 'card' }, ...k);
-  if (!sel || (['evento', 'zoom', 'lento'].includes(sel.tipo) && !vive) || (sel.tipo === 'borrada' && !((P.cortes || {}).borradas || []).includes(ref)))
+  if (!sel || (['evento', 'zoom', 'lento', 'filtro'].includes(sel.tipo) && !vive) || (sel.tipo === 'borrada' && !((P.cortes || {}).borradas || []).includes(ref)))
     return [card(h('p', { class: 'sub' }, 'Toca algo en la línea de tiempo para ver sus ajustes.'))];
   if (sel.tipo === 'pausa') return [card(h('h2', {}, 'Pausa automática'), h('p', { class: 'sub' }, `De ${mmss(ref[0])} a ${mmss(ref[1])}. Se corta sola. Ajústala en Recortar.`),
     h('button', { type: 'button', class: 'btn ghost', onclick: () => irPaso('recorte') }, 'Ir a Recortar'))];
@@ -26,6 +26,8 @@ export function cuerpoPropiedades(sel, ctx) {
     h('p', { class: 'hint' }, `${mmss(ref.start)} → ${mmss(ref.end)}`));
 
   if (sel.tipo === 'zoom') return [tiempo, card(h('h2', {}, 'Zoom'), slider('Cuánto acerca', 1, 1.3, 0.01, ref.level ?? 1.1, (v) => `${Number(v).toFixed(2)}x`, (v) => { ref.level = v; cambio(); }, 1.1))];
+  if (sel.tipo === 'filtro') return [tiempo, card(h('h2', {}, 'Filtro'), slider('Intensidad', 0, 1, 0.05, ref.k ?? 1, (v) => `${Math.round(v * 100)}%`, (v) => { ref.k = v; cambio(); }, 1),
+    h('button', { type: 'button', class: 'btn ghost', onclick: () => { ref.start = null; ref.end = null; refrescar(); } }, 'Ponerlo en todo el video'))];
   if (sel.tipo === 'lento') return [tiempo, card(h('h2', {}, 'Cámara lenta'),
     seg('Velocidad', [[1.5, '1.5x más lento'], [2, '2x'], [3, '3x'], [4, '4x']], ref.factor, (v) => { ref.factor = v; refrescar(); }),
     toggle('Voz grave y oscura', ref.grave, (v) => { ref.grave = v; refrescar(); }))];

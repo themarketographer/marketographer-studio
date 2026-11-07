@@ -488,7 +488,7 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .lt-marca { position: absolute; top: 0; height: 22px; border-left: 1px solid var(--border); pointer-events: none; font-style: normal; } .lt-marca span { margin-left: 3px; color: var(--muted); }
 .lt-b { position: absolute; box-sizing: border-box; border-radius: 6px; overflow: hidden; white-space: nowrap; padding: 0 5px; display: flex; align-items: center; cursor: grab; font-size: 11px; color: #181818; }
 .lt-b.sel { outline: 2px solid var(--ink); z-index: 2; }
-.lt-tit { background: var(--accent); } .lt-esp { background: #b78cff; } .lt-lento { background: var(--ok); color: #fff; }
+.lt-fil { background: #ff9a5b; } .lt-tit { background: var(--accent); } .lt-esp { background: #b78cff; } .lt-lento { background: var(--ok); color: #fff; }
 .lt-zoom { background: #3cd7ff; min-width: 12px; width: 12px !important; margin-left: -6px; transform: rotate(45deg) scale(.6); border-radius: 3px; padding: 0; }
 .lt-nota { position: absolute; font-style: normal; color: var(--ink); pointer-events: none; }
 .lt-musica { position: absolute; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--ok) 50%, transparent); font-size: 8px; line-height: 8px; text-align: center; pointer-events: none; font-style: normal; }
@@ -502,3 +502,6 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .lt-tip { position: absolute; background: var(--ink); color: var(--surface-200); padding: 3px 7px; border-radius: 6px; pointer-events: none; z-index: 5; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .ed > .lt { display: none; } .ed:has(.lt.abierto) .ltime { display: block; } }
 .ed.con-hoja .lt { z-index: 31; }
+.filtros-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; }
+.filtro-mini { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-200); color: var(--ink); cursor: pointer; font-size: 12px; }
+.filtro-mini:hover { border-color: var(--accent); } .filtro-mini canvas { width: 100%; height: auto; border-radius: 6px; }

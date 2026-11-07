@@ -66,7 +66,7 @@ function zoomScale(zooms, t, estilo, deriva) {
 
 export const DIM_FORMATO = { '9x16': [720, 1280], '16x9': [1280, 720], '1x1': [900, 900], '4x5': [800, 1000] };
 
-export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam, estatico = false, sfxBase = '', sfxUserUrl = null, musicUrl = null, escenaUrl = null }) {
+export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam, estatico = false, sfxBase = '', sfxUserUrl = null, musicUrl = null, escenaUrl = null, getFiltros = () => ({}) }) {
   // El lienzo toma la proporción del formato elegido (9:16, 16:9, 1:1 o 4:5). Si el original es distinto, se recorta, nunca se estira.
   const [W, H] = DIM_FORMATO[(getPlan() || {}).formato] || DIM_FORMATO['9x16'];
   const ZY = H > W ? 0.38 : 0.45;
@@ -658,7 +658,20 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
 
   // ---------- imagen ----------
   const filtroOk = 'filter' in ctx;
-  function dibujarFrame(c, s, st, bn) {
+  // Filtros (plan.filtros): mismas reglas que engine/filtros.py (intensidad k, rampa de 0,25 s en los tramos)
+  const NEUTRO_F = { grayscale: 0, sepia: 0, saturate: 1, contrast: 1, brightness: 1, 'hue-rotate': 0, blur: 0 }, UNI_F = { 'hue-rotate': 'deg', blur: 'px' };
+  function filtrosCss(P, t) {
+    const lista = getFiltros(), out = [];
+    for (const f of P.filtros || []) {
+      const d = lista[f.filtro]; if (!d) continue;
+      const a = f.start, b = f.end;
+      const k = a == null || b == null ? Number(f.k ?? 1) : (t < a || t >= b ? 0 : Number(f.k ?? 1) * Math.max(0, Math.min(1, (t - a) / 0.25, (b - t) / 0.25)));
+      if (k <= 0.001) continue;
+      for (const [n, v] of d) { const x = NEUTRO_F[n] + (v - NEUTRO_F[n]) * k; out.push(`${n}(${n === 'blur' ? x * W / 1080 : x}${UNI_F[n] || ''})`); }
+    }
+    return out.join(' ');
+  }
+  function dibujarFrame(c, s, st, bn, fcss = '') {
     const im = st.imagen;
     c.save();
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -669,6 +682,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       if (Math.abs(im.brillo) > 0.5) partes.push(`brightness(${1 + im.brillo / 255})`);
       if (Math.abs(im.saturacion - 1) > 0.01) partes.push(`saturate(${im.saturacion})`);
       if (bn > 0) partes.push(`grayscale(${bn})`);
+      if (fcss) partes.push(fcss);
       if (partes.length) c.filter = partes.join(' ');
     }
     if (s > 1.001) { c.translate(W / 2, H * ZY); c.scale(s, s); c.translate(-W / 2, -H * ZY); }
@@ -794,7 +808,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const siempre = st.motionBlurModo === 'siempre', baseMb = siempre ? 0.55 + 0.25 * Math.sin(t * 1.9) : 0;
     const fuerzaMb = Math.max(vel > 0.05 ? Math.min(vel * 3, 1) : 0, baseMb);
     sPrev = s; tPrev = t;
-    dibujarFrame(fctx, s, st, bn);
+    dibujarFrame(fctx, s, st, bn, filtrosCss(P, t));
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
     const quiereMatte = back.length || k > 0.01 || (pel.on && (pel.bloom > 0.02 || pel.halacion > 0.02 || pel.sobreMi === false)) || (modo !== 'titulos' && modo !== 'off' && bw > 0.01) || (mb > 0.02 && fuerzaMb > 0.02);
     const conMatte = quiereMatte && actualizarMatte();

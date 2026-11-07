@@ -543,6 +543,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     S.p = await api(`${A}/proyectos/${id}`);
     ESCIMG = await api(A + '/escenas').catch(() => []);
     COMBOS = await api(A + '/combos').catch(() => COMBOS);
+    FILTROS = await api(A + '/filtros').then((x) => x.filtros).catch(() => FILTROS);
     SFXU = await api(A + '/sfx').catch(() => []);
     prepararPlan(S.p);
     S.dim = await dimsVideo(`/api${A}/proyectos/${id}/video/source`);
@@ -754,7 +755,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (timeline) { timeline.destroy(); timeline = null; }
     let pantalla;
     if (S.tab === 'live') {
-      live = crearLive({ onEdit: () => cambio(), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}` });
+      live = crearLive({ onEdit: () => cambio(), getFiltros: () => Object.fromEntries(FILTROS.map((f) => [f.id, f.ops])), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}` });
       video = live.video; pantalla = live.el;
     } else {
       video = h('video', { controls: true, playsinline: true, src: vurl(S.tab), class: 'player', onloadedmetadata: (e) => { const vw = e.target.videoWidth, vh = e.target.videoHeight; if (vw) { const ph = e.target.closest('.phone'); ph.style.aspectRatio = `${vw} / ${vh}`; ph.classList.toggle('ancho', vw / vh > 1.2); e.target.closest('.ed')?.classList.toggle('ancho', vw / vh > 1.2); } } }); pantalla = video;
@@ -764,7 +765,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t), onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t), onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
@@ -832,6 +833,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       { id: 'camara', n: 'Zoom y cámara lenta', sw: [st.zooms, (v) => { st.zooms = v; }], r: (st.zooms ? `Zoom ${st.zoomEstilo}` : 'Sin zoom') + (lentos ? ` · ${lentos} en cámara lenta` : '') },
       { id: 'fondo', n: 'Fondo desenfocado', r: FONDO_TXT[st.fondoModo] + (st.motionBlur > 0.03 ? ' · con estela' : '') },
       { id: 'look', n: 'Color y contraste', r: 'Looks guardados, contraste y viñeta' },
+      { id: 'filtros', n: 'Filtros', r: (P.filtros || []).length ? `${P.filtros.length} en tu video` : 'Blanco y negro, cálido, noche...' },
       { id: 'pelicula', n: 'Look de película', sw: [pe.on, (v) => { pe.on = v; }], r: pe.on ? `Brillo en luces ${Math.round(pe.bloom * 100)}% · grano ${Math.round(pe.grano * 100)}%` : 'Apagado' },
       { id: 'audio', n: 'Voz y música', sw: [a.mejorar, (v) => { a.mejorar = v; }], r: (a.mejorar ? 'Voz mejorada' : 'Voz original') + (a.musica && a.musica.archivo ? ' y música' : '') },
       { id: 'sonidos', n: 'Efectos de sonido', sw: [st.sonidos, (v) => { st.sonidos = v; }], r: st.sonidos ? `Títulos: ${nombreSfx(st.sonidoTitulos)} · zoom: ${nombreSfx(st.sfxZoom)}` : 'Apagados' },
@@ -845,7 +847,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     { id: 'recorte', n: 'Recortar', r: 'Qué se queda', ic: 'cortes', inline: 'recorte', nota: 'Borra frases y palabras con el texto. Después se cortan solas las pausas, respiraciones y ruidos, y afinas lo que quieras.' },
     { id: 'guion', n: 'Corregir', r: 'Lo que queda', ic: 'doc', inline: 'guion', nota: 'Arregla nombres y palabras mal escritas, solo de lo que quedó en el video. Este paso cambia el texto de todo lo demás.' },
     { id: 'pantalla', n: 'Texto en pantalla', r: 'Grandes y subtítulos', ic: 'subs', tiles: ['capas', 'titulos', 'subs', 'elementos'], nota: 'Todo lo que se escribe sobre el video. Cada tarjeta trae su propia tipografía y color.' },
-    { id: 'imagen', n: 'Imagen y cámara', r: 'Formato, zoom y color', ic: 'camara', tiles: ['formato', 'camara', 'fondo', 'look', 'pelicula'], nota: 'En qué formato se edita el video, cómo se mueve la cámara y cómo se ve la imagen.' },
+    { id: 'imagen', n: 'Imagen y cámara', r: 'Formato, zoom y color', ic: 'camara', tiles: ['formato', 'camara', 'fondo', 'look', 'filtros', 'pelicula'], nota: 'En qué formato se edita el video, cómo se mueve la cámara y cómo se ve la imagen.' },
     { id: 'sonido', n: 'Sonido', r: 'Voz y música', ic: 'audio', tiles: ['audio', 'sonidos'], nota: 'Tu voz, la música de fondo y los efectos de sonido.' },
     { id: 'publicar', n: 'Publicar', r: 'Final y portada', ic: 'publicar', tiles: ['cierre', 'publicar'], nota: 'El cierre del video, la portada y el caption. Exporta desde el botón dorado.' },
   ];
@@ -862,7 +864,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   function pintarTiles() {
     if (!tilesEl || !tilesEl.isConnected || !S.p || !S.p.plan) return;
     const P = PASOS.find((x) => x.id === S.paso);
-    const voz = esVoz(), lista = voz ? (P.id === 'pantalla' ? ['capas', 'frases', 'subs', 'elementos'] : P.id === 'imagen' ? ['look', 'pelicula'] : P.tiles) : P.tiles;
+    const voz = esVoz(), lista = voz ? (P.id === 'pantalla' ? ['capas', 'frases', 'subs', 'elementos'] : P.id === 'imagen' ? ['look', 'filtros', 'pelicula'] : P.tiles) : P.tiles;
     tilesEl.replaceChildren(...datosTarjetas().filter((t) => (lista || []).includes(t.id)).map(tileEl));
   }
   function colSet() {
@@ -914,6 +916,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     camara: ['Zoom y cámara lenta', 'Zooms que acompañan lo que dices y tramos en cámara lenta.', () => panelCamara()],
     fondo: ['Fondo desenfocado', 'Desenfoca lo que hay detrás de ti, siempre o solo cuando hay una palabra grande.', () => panelFondo()],
     look: ['Color y contraste', 'Un clic cambia todo el estilo. Después afinas color y luz.', () => panelLook()],
+    filtros: ['Filtros', 'Para todo el video o solo un tramo. Se ven igual al exportar.', () => panelFiltros()],
     pelicula: ['Look de película', 'Brillo y halo en las luces del fondo, grano y color de película hecha en rollo.', () => panelPelicula()],
     audio: ['Voz y música', 'Mejora tu voz y elige la música de fondo.', () => panelAudio()],
     sonidos: ['Efectos de sonido', 'Qué suena en cada título, zoom y cierre, y tus propios sonidos.', () => panelSonidos()],
@@ -2027,6 +2030,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
   }
 
   // ----- Frases animadas (voz en off): texto cinético con animaciones que se conectan solas -----
+  let FILTROS = [];
   let COMBOS = { combos: [], emojis: {}, mezcla: [] };
   const ANIM_NOM = { pop: 'Pop', deslizar: 'Desliza', caer: 'Cae', escribir: 'Escribe', desenfoque: 'Enfoca', zoom: 'Zoom', rebote: 'Rebota', resorte: 'Resorte' };
   const SALIDAS = [['auto', 'Según la animación'], ['fade', 'Se desvanece'], ['subir', 'Sube'], ['bajar', 'Baja'], ['encoger', 'Se encoge'], ['corte', 'Corte directo']];
@@ -2502,6 +2506,26 @@ Lo que necesito de ti:
         toggle('Blanco y negro mientras dura cada zoom', st.zoomBN, (v) => { st.zoomBN = v; refrescar(); }, 'El color vuelve cuando el zoom termina.'),
         toggle('Zoom lento continuo después de cada zoom', st.zoomDeriva, (v) => { st.zoomDeriva = v; refrescar(); }),
         h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Sonido al hacer zoom'), h('p', { class: 'hint' }, `Ahora: ${nombreSfx(st.sfxZoom)}.`), h('button', { type: 'button', class: 'btn ghost sm', onclick: () => abrirHoja('sonidos'), html: ic('sonidos', 16) + ' Cambiar sonidos' })));
+  }
+  const cssFiltro = (ops) => ops.map(([n, v]) => `${n}(${v}${n === 'hue-rotate' ? 'deg' : n === 'blur' ? 'px' : ''})`).join(' ');
+  function panelFiltros() {
+    const P = plan(), lista = (P.filtros = P.filtros || []), t = +tiempoActual().toFixed(2);
+    const nuevo = (fid, start = null, end = null) => { lista.push({ id: 'f' + Date.now().toString(36), filtro: fid, k: 1, start, end }); refrescar(); };
+    const mini = (f) => {
+      const cv = h('canvas', { width: 90, height: 160, 'aria-hidden': 'true' });
+      try { const g = cv.getContext('2d'); g.filter = cssFiltro(f.ops.map(([n, v]) => [n, n === 'blur' ? v / 4 : v])); const v = live && live.video; if (v && v.videoWidth) { const sc = Math.max(90 / v.videoWidth, 160 / v.videoHeight), w = v.videoWidth * sc, hh = v.videoHeight * sc; g.drawImage(v, (90 - w) / 2, (160 - hh) / 2, w, hh); } else { g.fillStyle = '#888'; g.fillRect(0, 0, 90, 160); } } catch { /* sin vista previa */ }
+      return h('button', { type: 'button', class: 'filtro-mini', title: `Poner ${f.n} en todo el video`, onclick: () => nuevo(f.id) }, cv, h('span', {}, f.n));
+    };
+    const fila = (f) => {
+      const d = FILTROS.find((x) => x.id === f.filtro) || { n: f.filtro }, tramo = f.start != null;
+      return h('li', { class: 'ev' }, h('div', { class: 'ev-top' }, h('span', { class: 'tag' }, d.n), h('span', { class: 'tiempo' }, tramo ? `${fmt(f.start)} a ${fmt(f.end)}` : 'Todo el video'),
+        tramo ? h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { f.start = null; f.end = null; refrescar(); } }, 'Todo el video') : h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { f.start = t; f.end = Math.min(+(t + 3).toFixed(2), P.duration || t + 3); refrescar(); } }, 'Solo desde aquí 3 s'),
+        h('button', { type: 'button', class: 'btn danger sm', onclick: () => { P.filtros = lista.filter((x) => x !== f); refrescar(); } }, 'Quitar')),
+      slider('Intensidad', 0, 1, 0.05, f.k ?? 1, (v) => `${Math.round(v * 100)}%`, (v) => { f.k = v; cambio(); }, 1));
+    };
+    return [h('section', { class: 'card' }, h('h2', {}, 'Elige un filtro'), h('p', { class: 'sub' }, 'Toca uno para ponerlo en todo el video. Después puedes dejarlo solo en un tramo.'),
+      h('div', { class: 'filtros-grid' }, FILTROS.map(mini))),
+      lista.length ? h('section', { class: 'card' }, h('h2', {}, 'En tu video'), h('ul', { class: 'evs' }, lista.map(fila))) : h('p', { class: 'hint' }, 'Todavía no pusiste ningún filtro.')];
   }
   async function panelLook() {
     const st = estilo(), im = st.imagen;

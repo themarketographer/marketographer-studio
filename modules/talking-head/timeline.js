@@ -2,8 +2,8 @@
 // Lee y edita los campos que ya existen en el plan (events, zooms, lentos, cortes.borradas). Todo en segundos del video original.
 const R2 = (n) => Math.round(n * 100) / 100;
 const mmss = (t, c) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}${c ? '.' + String(Math.floor((t % 1) * 100)).padStart(2, '0') : ''}`;
-const PISTAS = [['textos', 'Textos', 22, 32], ['elem', 'Elementos', 56, 32], ['voz', 'Voz', 90, 56], ['cam', 'Cámara', 148, 32], ['son', 'Sonido', 182, 32]];
-const ALTO = 216, MIN_PXS = 10, MAX_PXS = 400, MIN_DUR = 0.2;
+const PISTAS = [['textos', 'Textos', 22, 32], ['elem', 'Elementos', 56, 32], ['voz', 'Voz', 90, 56], ['cam', 'Cámara', 148, 32], ['fil', 'Filtros', 182, 32], ['son', 'Sonido', 216, 32]];
+const ALTO = 250, MIN_PXS = 10, MAX_PXS = 400, MIN_DUR = 0.2;
 
 // Pega t al punto más cercano (lista ordenada) si está a menos de tol segundos; si no, devuelve t.
 export function imanar(t, puntos, tol) {
@@ -16,7 +16,7 @@ export function imanar(t, puntos, tol) {
 }
 // node -e "import('./timeline.js').then(m=>{console.assert(m.imanar(1.02,[0,1,2],0.05)===1);console.assert(m.imanar(1.5,[0,1,2],0.05)===1.5);console.assert(m.imanar(3,[],1)===3)})"
 
-export function crearTimeline({ h, getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr }) {
+export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr }) {
   let pxs = 40, ajustar = true, sel = null, rango = null, iman = true, abierto = true, raf = 0, destruido = false, guia = null;
   try { abierto = localStorage.getItem('estudio.timeline') !== '0'; } catch { /* sin memoria */ }
   const dur = () => getPlan().duration || 1;
@@ -52,6 +52,7 @@ export function crearTimeline({ h, getPlan, getWords, getEnv, getVideo, kinds = 
     for (const w of getWords() || []) p.push(w.start, w.end);
     for (const e of P.events || []) if (e !== excluir) p.push(e.start, e.end);
     for (const l of P.lentos || []) if (l !== excluir) p.push(l.start, l.end);
+    for (const f of P.filtros || []) if (f !== excluir && f.start != null) p.push(f.start, f.end);
     for (const z of P.zooms || []) if (z !== excluir) p.push(z.t);
     const c = P.cortes || {};
     for (const [a, b] of (c.on ? c.rangos || [] : []).concat(c.borradas || [])) p.push(a, b);
@@ -78,11 +79,12 @@ export function crearTimeline({ h, getPlan, getWords, getEnv, getVideo, kinds = 
     for (const e of P.events || []) {
       if (!e.kind || e.kind === 'frase') kids.push(bloque('lt-tit', e.start, e.end, 22, 32, nm(e), e, 'evento', `Título ${nm(e)}, ${seg(e.start, e.end)}`));
       else { const n = (kinds[e.kind] && kinds[e.kind].n) || e.kind; kids.push(bloque('lt-esp', e.start, e.end, 56, 32, n, e, 'evento', `${n}, ${seg(e.start, e.end)}`)); }
-      if (e.sfx && e.sfx !== 'none') kids.push(h('i', { class: 'lt-nota', title: `Sonido ${e.sfx}`, style: `left:${xDe(e.start) - 5}px;top:190px` }, '♪'));
+      if (e.sfx && e.sfx !== 'none') kids.push(h('i', { class: 'lt-nota', title: `Sonido ${e.sfx}`, style: `left:${xDe(e.start) - 5}px;top:224px` }, '♪'));
     }
     const m = P.audio && P.audio.musica;
-    if (m && m.archivo) kids.push(h('i', { class: 'lt-musica', title: 'Música de fondo', style: `left:0;width:${xDe(d)}px;top:204px` }, 'música'));
+    if (m && m.archivo) kids.push(h('i', { class: 'lt-musica', title: 'Música de fondo', style: `left:0;width:${xDe(d)}px;top:238px` }, 'música'));
     for (const l of P.lentos || []) kids.push(bloque('lt-lento', l.start, l.end, 148, 32, 'lenta', l, 'lento', `Cámara lenta ${seg(l.start, l.end)}`));
+    for (const f of P.filtros || []) if (f.start != null) { const n = (getFiltros().find((x) => x.id === f.filtro) || {}).n || f.filtro; kids.push(bloque('lt-fil', f.start, f.end, 182, 32, n, f, 'filtro', `Filtro ${n}, ${seg(f.start, f.end)}`)); }
     for (const z of P.zooms || []) kids.push(bloque('lt-zoom', z.t, z.t, 152, 24, '', z, 'zoom', `Zoom en el segundo ${R2(z.t)}`));
     const c = P.cortes || {};
     if (c.on) for (const r of c.rangos || []) kids.push(h('div', { class: 'lt-corte auto' + (sel && sel.ref === r ? ' sel' : ''), title: 'Pausa que se corta sola', style: `left:${xDe(r[0])}px;width:${Math.max(2, xDe(r[1] - r[0]))}px` }));
@@ -143,7 +145,7 @@ export function crearTimeline({ h, getPlan, getWords, getEnv, getVideo, kinds = 
   function borrarSel() {
     const P = getPlan(); if (rango) return quitarRango();
     if (!sel) return; if (sel.tipo === 'borrada') return restaurar();
-    const lista = { evento: P.events, zoom: P.zooms, lento: P.lentos }[sel.tipo]; if (!lista) return;
+    const lista = { evento: P.events, zoom: P.zooms, lento: P.lentos, filtro: P.filtros }[sel.tipo]; if (!lista) return;
     lista.splice(lista.indexOf(sel.ref), 1); sel = null; onCambio();
   }
   function aplicar(ref, tipo, a, b) {
@@ -227,7 +229,7 @@ export function crearTimeline({ h, getPlan, getWords, getEnv, getVideo, kinds = 
     if (k === 'Escape') { sel = null; rango = null; pintar(); }
     else if (k === 'Delete' || k === 'Backspace') borrarSel();
     else if (k === 's' || k === 'S') bImn.click();
-    else if ((k === 'ArrowLeft' || k === 'ArrowRight') && sel && ['evento', 'zoom', 'lento'].includes(sel.tipo)) {
+    else if ((k === 'ArrowLeft' || k === 'ArrowRight') && sel && ['evento', 'zoom', 'lento', 'filtro'].includes(sel.tipo)) {
       const dt = (k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1) / (P.fps || 30), r = sel.ref;
       if (sel.tipo === 'zoom') aplicar(r, 'zoom', r.t + dt, r.t); else aplicar(r, sel.tipo, r.start + dt, r.end + dt);
       onCambio();

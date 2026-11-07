@@ -11,6 +11,7 @@ import audio as audiomod
 import sfx
 import unicodedata
 import graficos as graf
+import filtros
 
 SIZE_FRAC = {"S": 0.40, "M": 0.60, "L": 0.78, "XL": 0.92}
 SUB_SIZE = {"S": 0.030, "M": 0.038, "L": 0.047, "XL": 0.058}
@@ -762,6 +763,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
         f, a, fi, si = item
         t = fi / fps
         f = apply_look(f)
+        f = filtros.aplicar(f, plan, t, W)
         s = escala(t, si)
         if s > 1.001:
             M = np.float32([[s, 0, cx_z * (1 - s)], [0, s, cy_z * (1 - s)]])

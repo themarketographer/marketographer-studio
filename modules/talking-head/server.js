@@ -70,6 +70,7 @@ export default async function register({ route, config }) {
   });
 
   // Animaciones y emojis predefinidos para las frases de la voz en off (una sola fuente para el motor y para el editor).
+  route.get('/filtros', () => readJson(engine, 'filtros.json', { filtros: [] }));
   route.get('/combos', () => readJson(engine, 'combos.json', { combos: [], emojis: {}, mezcla: [] }));
 
   // Plantillas de voz en off: fondo, animaciones, estilo y música con un nombre, guardadas en data/plantillas-voz.json.
