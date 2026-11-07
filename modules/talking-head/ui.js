@@ -1011,6 +1011,22 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     pintarTiles();
   }
   const escCierra = (e) => { if (e.key === 'Escape' && S.panel) cerrarHoja(); };
+  // Asa de la hoja inferior: arrastrar hacia arriba la agranda, hacia abajo la achica y, si se baja del todo, la cierra. Doble toque alterna grande/mediana.
+  function asaHoja() {
+    const vh = () => window.innerHeight, poner = (px) => root.style.setProperty('--hoja-h', `${Math.round(Math.max(vh() * 0.3, Math.min(px, vh() * 0.92)))}px`);
+    const actual = () => parseFloat(getComputedStyle(root).getPropertyValue('--hoja-h')) || vh() * 0.58;
+    const asa = h('div', { class: 'hoja-asa', role: 'slider', tabindex: '0', 'aria-label': 'Altura del panel', title: 'Arrastra para cambiar la altura. Hacia abajo lo cierra.', 'aria-valuemin': '30', 'aria-valuemax': '92' }, h('i'));
+    asa.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); try { asa.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+      const y0 = e.clientY, h0 = actual();
+      const mover = (ev) => { const px = h0 + (y0 - ev.clientY); root.style.setProperty('--hoja-h', `${Math.round(Math.max(60, Math.min(px, vh() * 0.92)))}px`); };
+      const fin = (ev) => { asa.removeEventListener('pointermove', mover); asa.removeEventListener('pointerup', fin); const px = actual(); if (px < vh() * 0.24) { root.style.removeProperty('--hoja-h'); cerrarHoja(); } else poner(px); };
+      asa.addEventListener('pointermove', mover); asa.addEventListener('pointerup', fin);
+    });
+    asa.addEventListener('dblclick', () => poner(actual() > vh() * 0.7 ? vh() * 0.58 : vh() * 0.9));
+    asa.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp') { e.preventDefault(); poner(actual() + 40); } else if (e.key === 'ArrowDown') { e.preventDefault(); poner(actual() - 40); } });
+    return asa;
+  }
   function montarHoja() {
     document.querySelectorAll('.hoja, .hoja-fondo').forEach((x) => x.remove());
     document.removeEventListener('keydown', escCierra); document.addEventListener('keydown', escCierra);
@@ -1019,11 +1035,13 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const cerrar = h('button', { type: 'button', class: 'btn ghost hoja-x', 'aria-label': 'Cerrar', onclick: cerrarHoja, html: icon('x') });
     const fondo = h('div', { class: 'hoja-fondo', 'aria-hidden': 'true', onclick: cerrarHoja });
     const nav = S.p && S.p.plan && S.panel !== 'ajustes' ? h('nav', { class: 'hoja-nav', 'aria-label': 'Ir a otra tarjeta' }, tarjetasVisibles().map((t) => h('button', { type: 'button', class: 'chip' + (t.id === S.panel ? ' on' : ''), 'aria-pressed': String(t.id === S.panel), onclick: () => abrirHoja(t.id), html: `${ic(t.id, 14)}<span>${t.n}</span>` }))) : null;
-    const hoja = h('aside', { class: 'hoja', role: 'dialog', 'aria-label': titulo, onkeydown: (e) => { if (e.key === 'Escape') cerrarHoja(); } },
+    const movil = window.innerWidth < 900;  // en teléfono la tarjeta sube desde abajo (como Captions); en pantalla ancha se acopla al lado
+    const hoja = h('aside', { class: 'hoja' + (movil ? ' abajo' : ''), role: 'dialog', 'aria-label': titulo, onkeydown: (e) => { if (e.key === 'Escape') cerrarHoja(); } },
+      movil ? asaHoja() : null,
       h('div', { class: 'hoja-head' }, h('div', {}, h('h2', {}, titulo), h('p', { class: 'sub' }, nota)), cerrar),
       nav, panelEl);
     const wsEd = document.querySelector('.ed.ws');
-    if (wsEd) wsEd.append(hoja); else root.append(fondo, hoja);  // en pantalla ancha la tarjeta queda acoplada junto al video, sin tapar nada
+    if (wsEd) wsEd.append(hoja); else if (movil) root.append(hoja); else root.append(fondo, hoja);  // en pantalla ancha la tarjeta queda acoplada junto al video, sin tapar nada
     document.querySelector('.ed')?.classList.add('con-hoja');
     if (S.panel !== 'propiedades') cerrar.focus();
     pintarPanel();

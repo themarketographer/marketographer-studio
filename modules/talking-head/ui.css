@@ -564,3 +564,17 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
   .ib { min-width: 44px; }
   .cab-proy .btn.gold { min-height: 44px; }
 }
+
+/* ---------- Hoja inferior en pantallas angostas (como Captions): sube desde abajo, el video sigue a la vista ---------- */
+@keyframes hojaSube { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes hojaBaja { to { transform: translateY(100%); } }
+@media (max-width: 899px) {
+  .hoja.abajo { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: var(--hoja-h, 58vh); max-height: 92vh; border-radius: 22px 22px 0 0; border-bottom: 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom)); z-index: 40;
+    box-shadow: 0 -10px 40px rgba(0,0,0,.35); animation: hojaSube 260ms var(--ease) both; overscroll-behavior: contain; }
+  .hoja.abajo.sale { animation: hojaBaja 190ms var(--ease) both; }
+  .hoja-asa { position: sticky; top: 0; z-index: 3; display: flex; justify-content: center; padding: 10px 0 4px; margin: 0 -16px; cursor: grab; touch-action: none; background: var(--surface-100); border-radius: 22px 22px 0 0; outline: none; }
+  .hoja-asa i { width: 44px; height: 5px; border-radius: 3px; background: var(--border); transition: background 150ms var(--ease); }
+  .hoja-asa:hover i, .hoja-asa:focus-visible i { background: var(--accent); }
+  .hoja.abajo .hoja-head { padding-top: 4px; top: 22px; }
+  .ed.con-hoja { padding-bottom: var(--hoja-h, 58vh); }
+}
