@@ -931,7 +931,7 @@ def evitar_solapes(events, sprites, style, H):
         sub = (float(s["y"]), half * 2)
     items = []
     for e in events:
-        if e.get("kind") in ("punto", "escena", "frase", "sticker") or (not e.get("kind") and e.get("pos") in DETRAS):
+        if e.get("kind") in ("punto", "escena", "frase", "sticker", "rotulo", "llamada", "etiqueta", "seccion") or (not e.get("kind") and e.get("pos") in DETRAS):
             continue
         alto, off = _alto_y(e, sprites[e["id"]], H)
         manual = e.get("y") is not None

@@ -1225,7 +1225,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
 
   // Un sonido distinto para cada animación de título y para cada tipo de elemento, y el volumen de cada sonido.
-  const TIPOS_SFX = [['escena', 'Escenas'], ['lista', 'Listas'], ['conexion', 'Conexiones'], ['numero', 'Números'], ['barras', 'Barras'], ['punto', 'Puntos'], ['sticker', 'Stickers']];
+  const TIPOS_SFX = [['escena', 'Escenas'], ['lista', 'Listas'], ['conexion', 'Conexiones'], ['numero', 'Números'], ['barras', 'Barras'], ['punto', 'Puntos'], ['sticker', 'Stickers'], ['rotulo', 'Nombre y cargo'], ['llamada', 'Llamadas'], ['etiqueta', 'Etiquetas'], ['seccion', 'Secciones']];
   const SFX_TIPO_DEF = { escena: 'whoosh', punto: 'whoosh' };
   function selSfx(valor, conAuto, onchange, etiqueta) {
     return h('div', { class: 'sfx-sel' },
@@ -2180,7 +2180,7 @@ Lo que necesito de ti:
 
   // ----- Capas: todo lo que agregaste, en orden, y cada cosa se edita en vivo -----
   const TIPO_CAPA = (e) => (e.kind === 'escena' ? 'Escena' : e.kind === 'frase' ? 'Frase' : e.kind === 'sticker' ? (e.fija ? 'Marca' : 'Sticker') : e.kind ? 'Elemento' : 'Título');
-  const NOM_KIND = { lista: 'Lista', conexion: 'Conexión', numero: 'Número', barras: 'Barras', punto: 'Cambio de escena' };
+  const NOM_KIND = { lista: 'Lista', conexion: 'Conexión', numero: 'Número', barras: 'Barras', rotulo: 'Nombre y cargo', llamada: 'Llamada', etiqueta: 'Etiqueta', seccion: 'Sección', punto: 'Cambio de escena' };
   const nombreCapa = (e) => (e.kind === 'sticker' ? e.archivo || 'Sin imagen' : e.kind === 'escena' ? `${e.emoji || ''} ${(e.items || []).join(' ')}`.trim() || 'Escena'
     : e.kind === 'punto' ? 'Punto que cambia de escena' : e.kind && NOM_KIND[e.kind] ? `${NOM_KIND[e.kind]}: ${(e.text || '').slice(0, 30)}` : String(e.text || '').replace(/\*/g, ''));
   const irA = (t) => { if (video) video.currentTime = tVideo(t); if (live) live.ir(tVideo(t)); };
@@ -2215,7 +2215,8 @@ Lo que necesito de ti:
       ev.kind !== 'punto' ? h('label', { class: 'mini-f' }, 'Contenido', h('textarea', { rows: 3, onchange: (e) => { ev.items = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); ev.text = ev.items.join(' / '); cambio(); } }, (ev.items || []).join('\n'))) : null,
       ev.kind !== 'punto' ? seg('Tamaño', [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']], ev.size || 'M', (v) => { ev.size = v; refrescar(); }) : null,
       ev.kind !== 'punto' ? seg('Color', [['accent', 'Acento'], ['text', 'Texto']], ev.color || 'accent', (v) => { ev.color = v; refrescar(); }) : null,
-      ev.kind !== 'punto' ? bloqueAltura(ev, { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36 }[ev.kind] ?? 0.4) : null,
+      ev.kind !== 'punto' ? bloqueAltura(ev, { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36, rotulo: 0.78, llamada: 0.45, etiqueta: 0.2, seccion: 0.45 }[ev.kind] ?? 0.4) : null,
+      ev.kind === 'llamada' ? slider('Punto al que apunta: a lo ancho', 0, 1, 0.01, ev.x ?? 0.7, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.7) : null,
       seg('Sonido', sfxOpts(), ev.sfx || 'none', (v) => { ev.sfx = v; oirSfx(v); refrescar(); })];
   }
   function cuerpoFrase(ev) {
@@ -2308,6 +2309,10 @@ Lo que necesito de ti:
     numero: { n: 'Número que sube', ayuda: 'Primera línea el número con su unidad (90 días, 3x, $1500). Segunda línea la etiqueta, opcional.', ej: '90 días\nde datos antes de rendirte', dur: () => 2.4 },
     barras: { n: 'Barras', ayuda: 'Una barra por línea con el formato nombre:valor, por ejemplo Antes:20 y Después:85.', ej: 'Antes:20\nDespués:85', dur: (k) => 1.4 + 0.4 * k },
     escena: { n: 'Escena de texto', ayuda: '', ej: '', dur: () => 2.5 },
+    rotulo: { n: 'Nombre y cargo', ayuda: 'Primera línea el nombre, segunda el cargo (opcional). Entra deslizando desde la izquierda, abajo.', ej: 'Pablo Villarroel\nFotógrafo', dur: () => 3.5 },
+    llamada: { n: 'Llamada con flecha', ayuda: 'Un texto en una píldora con una línea que señala un punto del video. Elige el punto con altura y posición.', ej: 'Mira aquí', dur: () => 2.5 },
+    etiqueta: { n: 'Etiqueta', ayuda: 'Una píldora corta de color, como NUEVO o TIP. Entra con un pequeño rebote.', ej: 'NUEVO', dur: () => 2 },
+    seccion: { n: 'Título de sección', ayuda: 'Primera línea el título, segunda un número opcional (01). Oscurece el fondo. Sirve para separar partes.', ej: 'Mi método\n01', dur: () => 3 },
     punto: { n: 'Punto que cambia de escena', ayuda: 'Un punto crece, cubre la pantalla y al irse la escena cambia de plano.', ej: '', dur: () => 0.8 },
   };
   const ESP_DEF = { tipo: 'lista', texto: KINDS.lista.ej, size: 'M', y: null };

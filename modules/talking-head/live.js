@@ -236,7 +236,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!act.length) return;
     let sub = null;
     if (s.on) sub = [s.y, (SUB_SIZE[s.size] || 0.038) * 1.12 * (s.maxPal >= 3 ? 2 : 1) + 0.03];
-    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
+    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && !NUEVOS.includes(e.kind) && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
       const [h, off] = altoEv(e, st), manual = e.y != null;
       const base = manual ? e.y : (e.kind ? (KIND_Y0[e.kind] ?? 0.4) : (POS_Y[e.pos] ?? 0.3));
       return { e, h, off, c: base + off, manual };
@@ -459,7 +459,51 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (rev < 1) { c.beginPath(); c.rect(-w / 2, -hh / 2, w * rev, hh); c.clip(); }
     c.drawImage(im, -w / 2, -hh / 2, w, hh); c.restore();
   }
+  // ---------- gráficos esenciales: rótulo, llamada, etiqueta y sección (mismas medidas que engine/graficos.py) ----------
+  const NUEVOS = ['rotulo', 'llamada', 'etiqueta', 'seccion'];
+  function dibujarNuevo(c, ev, t, st) {
+    const k = ev.kind, d = t - ev.start, col = colores(st), alpha = clamp(d / 0.2) * clamp((ev.end - t) / 0.25);
+    const its = (ev.items || []).map(String).filter((x) => x.trim()), t0 = its[0] || '', t1 = its[1] || '';
+    if (alpha <= 0.01 || !t0) return;
+    const f = { S: 0.045, M: 0.06, L: 0.075, XL: 0.09 }[ev.size] || 0.06, caso = st.titulosCaso || 'mayus', tr = st.tracking, y0 = ev.y != null ? ev.y : null;
+    const pxDe = (txt, pxf) => { const it = sprItems(txt, '#000', st, ev), w200 = medida(it, 200, tr * 200); return Math.max(Math.min(pxf * H, 200 * 0.9 * W / Math.max(w200, 1)), 16); };
+    const ancho = (txt, pxf) => { if (!txt) return 0; const px = pxDe(txt, pxf); return medida(sprItems(txt, '#000', st, ev), px, tr * px); };
+    const txt = (s, pxf, color, cx, cy, alp, sc = 1) => { if (!s) return; const px = pxDe(s, pxf); c.save(); c.globalAlpha = alp; c.translate(cx, cy); c.scale(sc, sc); dibujarTexto(c, [sprItems(s, color, st, ev)], 0, 0, px, st); c.restore(); };
+    const caja = (x0, y0_, x1, y1, r, color, alp) => { c.save(); c.globalAlpha = alp; c.fillStyle = color; c.beginPath(); c.roundRect(x0, y0_, x1 - x0, y1 - y0_, r); c.fill(); c.restore(); };
+    const OSC = '#181818';
+    if (k === 'rotulo') {
+      const pn = f * 0.75 * H, p = 0.022 * H, bar = Math.max(6, 0.007 * H), nh = pn * 1.12, ch = t1 ? f * 0.5 * H * 1.12 : 0, gap = t1 ? 0.004 * H : 0;
+      const wn = ancho(t0, f * 0.75), wc = ancho(t1, f * 0.5), bh = 2 * p + nh + gap + ch, bw = bar + 2 * p + Math.max(wn, wc);
+      const left = 0.05 * W, cy = H * (y0 ?? 0.78), top = cy - bh / 2, dx = -(1 - easeOut(clamp(d / 0.4))) * (bw + left);
+      caja(left + dx, top, left + dx + bw, top + bh, 0.012 * H, '#000', alpha * 0.7);
+      caja(left + dx, top, left + dx + bar, top + bh, 0, col.accent, alpha);
+      const tx = left + dx + bar + p;
+      txt(t0, f * 0.75, col.text, tx + wn / 2, top + p + nh / 2, alpha);
+      if (t1) txt(t1, f * 0.5, col.accent, tx + wc / 2, top + p + nh + gap + ch / 2, alpha);
+    } else if (k === 'llamada') {
+      const px = f * 0.7 * H, p = 0.016 * H, pw = ancho(t0, f * 0.7) + 3 * p, ph = px * 1.12 + 2 * p;
+      const X = (ev.x ?? 0.7) * W, Y = (y0 ?? 0.45) * H;
+      let cx = X < 0.5 * W ? X + 0.2 * W : X - 0.2 * W; cx = Math.min(Math.max(cx, pw / 2 + 0.03 * W), W - pw / 2 - 0.03 * W);
+      const cy = Y - 0.12 * H, u = easeOut(clamp((d - 0.1) / 0.35)), ax = cx, ay = cy + ph / 2;
+      c.save(); c.globalAlpha = alpha; c.strokeStyle = col.accent; c.fillStyle = col.accent; c.lineWidth = Math.max(Math.floor(0.004 * H), 3); c.lineCap = 'round';
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(ax + (X - ax) * u, ay + (Y - ay) * u); c.stroke();
+      c.beginPath(); c.arc(X, Y, 0.009 * H * u, 0, Math.PI * 2); c.fill(); c.restore();
+      caja(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2, ph / 2, col.accent, alpha);
+      txt(t0, f * 0.7, OSC, cx, cy, alpha);
+    } else if (k === 'etiqueta') {
+      const px = f * 0.8 * H, p = 0.014 * H, pw = ancho(t0, f * 0.8) + 4 * p, ph = px * 1.12 + 2 * p, u = clamp(d / 0.3), sc = 0.7 + 0.3 * u + 0.2 * Math.sin(Math.PI * u);
+      const cx = W / 2, cy = H * (y0 ?? 0.2);
+      caja(cx - pw * sc / 2, cy - ph * sc / 2, cx + pw * sc / 2, cy + ph * sc / 2, ph * sc / 2, col.accent, alpha);
+      txt(t0, f * 0.8, OSC, cx, cy, alpha, sc);
+    } else if (k === 'seccion') {
+      c.save(); c.globalAlpha = alpha * 0.4; c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.restore();
+      const yy = y0 ?? 0.45, rise = (1 - easeOut(clamp(d / 0.4))) * 0.03 * H, ta = alpha * clamp(d / 0.25);
+      if (t1) { txt(t1, 0.12, col.accent, W / 2, H * (yy - 0.03) + rise, ta); txt(t0, f * 1.1, col.text, W / 2, H * (yy + 0.07) + rise, ta); }
+      else txt(t0, f * 1.1, col.text, W / 2, H * yy + rise, ta);
+    }
+  }
   function dibujarKind(c, ev, t, st) {
+    if (NUEVOS.includes(ev.kind)) return dibujarNuevo(c, ev, t, st);
     if (ev.kind === 'sticker') return dibujarSticker(c, ev, t);
     if (ev.kind === 'escena') return dibujarEscena(c, ev, t, st);
     if (ev.kind === 'frase') return dibujarFrase(c, ev, t, st);
@@ -968,7 +1012,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     tiempo.textContent = `${fmt(vs.currentTime)} / ${fmt(dur)}`;
   }
   // arrastrar textos: mover un título, un elemento o los subtítulos cambia su altura
-  const KIND_Y = { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36, escena: 0.5, frase: 0.5, sticker: 0.3 };
+  const KIND_Y = { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36, escena: 0.5, frase: 0.5, sticker: 0.3, rotulo: 0.78, llamada: 0.45, etiqueta: 0.2, seccion: 0.45 };
   function arrastrables() {
     const P = getPlan(); if (!P || !P.style) return [];
     const t = vs.currentTime || 0, out = [];

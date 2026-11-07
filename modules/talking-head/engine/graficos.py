@@ -7,7 +7,8 @@ import cv2
 import numpy as np
 import render as R
 
-TIPOS = ("lista", "conexion", "numero", "barras", "punto", "escena", "frase", "sticker")
+NUEVOS = ("rotulo", "llamada", "etiqueta", "seccion")  # gráficos esenciales
+TIPOS = ("lista", "conexion", "numero", "barras", "punto", "escena", "frase", "sticker") + NUEVOS
 ESCENAS = None  # carpeta con las imágenes de las escenas (la fija render.py)
 _EMOJI_FUENTES = [("/System/Library/Fonts/Apple Color Emoji.ttc", 160), ("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 109),
                   ("/usr/share/fonts/noto/NotoColorEmoji.ttf", 109), ("C:/Windows/Fonts/seguiemj.ttf", 109)]
@@ -149,6 +150,8 @@ def _dibujar_sticker(dst, ev, obj, t, W, H):
 
 
 def preparar(ev, style, W, H, colors):
+    if ev["kind"] in NUEVOS:
+        return _preparar_nuevo(ev, style, W, H, colors)
     if ev["kind"] == "sticker":
         return _preparar_sticker(ev, W, H)
     if ev["kind"] == "frase":
@@ -196,6 +199,8 @@ def dibujar(dst, ev, obj, t, W, H, colors):
     alpha = R.clamp(d / 0.2) * R.clamp(tail / 0.25)
     if alpha <= 0.01 and k != "punto":
         return
+    if k in NUEVOS:
+        return _dibujar_nuevo(dst, ev, obj, t, W, H, colors)
     if k == "sticker":
         return _dibujar_sticker(dst, ev, obj, t, W, H)
     if k == "escena":
@@ -556,3 +561,118 @@ def _dibujar_frase(dst, ev, obj, t, W, H, colors):
                     a = a.copy()
                     a[:, int(a.shape[1] * rev):] = 0
                 _blit_scaled(dst, (rgb, a), cx - off * k * sc * s_sc, py, al, sk)
+
+
+# ---------- gráficos esenciales: rótulo, llamada, etiqueta y sección (mismas medidas que live.js) ----------
+OSCURO = (24, 24, 24)
+
+
+def _factor(ev):
+    return {"S": 0.045, "M": 0.06, "L": 0.075, "XL": 0.09}.get(ev.get("size", "M"), 0.06)
+
+
+def _lineas(ev):
+    return [str(x) for x in ev.get("items", []) if str(x).strip()]
+
+
+def _ancho(texto, pxf, style, W, H):
+    """Ancho del texto en píxeles, igual que lo mide live.js."""
+    its = [(w, style["font"], None) for w in R.caso_texto(texto, style.get("titulosCaso", "mayus")).split()]
+    tr = style["tracking"]
+    w200 = R.line_width(its, 200, tr * 200)
+    px = max(min(pxf * H, 200 * 0.9 * W / max(w200, 1)), 16)
+    return R.line_width(its, px, tr * px)
+
+
+def _preparar_nuevo(ev, style, W, H, colors):
+    k, its, f = ev["kind"], _lineas(ev), _factor(ev)
+    oscuro = {**colors, "text": OSCURO}
+    t0, t1 = (its[0] if its else ""), (its[1] if len(its) > 1 else "")
+    sp = lambda txt, pxf, col, cs=colors: _sprite(txt, pxf, col, style, W, H, cs) if txt else None
+    if k == "rotulo":
+        return {"n": sp(t0, f * 0.75, "text"), "c": sp(t1, f * 0.5, "accent"), "wn": _ancho(t0, f * 0.75, style, W, H) if t0 else 0, "wc": _ancho(t1, f * 0.5, style, W, H) if t1 else 0}
+    if k == "llamada":
+        return {"t": sp(t0, f * 0.7, "text", oscuro), "w": _ancho(t0, f * 0.7, style, W, H) if t0 else 0}
+    if k == "etiqueta":
+        return {"t": sp(t0, f * 0.8, "text", oscuro), "w": _ancho(t0, f * 0.8, style, W, H) if t0 else 0}
+    return {"t": sp(t0, f * 1.1, "text"), "n": sp(t1, 0.12, "accent")}
+
+
+def _caja(dst, x0, y0, x1, y1, r, bgr, alpha):
+    """Rectángulo redondeado mezclado con lo que hay debajo."""
+    from PIL import Image, ImageDraw
+    X0, Y0, X1, Y1 = max(int(x0), 0), max(int(y0), 0), min(int(x1), dst.shape[1]), min(int(y1), dst.shape[0])
+    if X1 <= X0 or Y1 <= Y0 or alpha <= 0:
+        return
+    S = 3  # supersample para bordes suaves
+    m = Image.new("L", ((X1 - X0) * S, (Y1 - Y0) * S), 0)
+    ImageDraw.Draw(m).rounded_rectangle((int((x0 - X0) * S), int((y0 - Y0) * S), int((x1 - X0) * S) - 1, int((y1 - Y0) * S) - 1), radius=int(r * S), fill=255)
+    a = (np.asarray(m.resize((X1 - X0, Y1 - Y0), Image.LANCZOS), np.float32) / 255.0 * alpha)[..., None]
+    roi = dst[Y0:Y1, X0:X1].astype(np.float32)
+    dst[Y0:Y1, X0:X1] = (roi * (1 - a) + np.array(bgr, np.float32) * a).astype(np.uint8)
+
+
+def _dibujar_nuevo(dst, ev, obj, t, W, H, colors):
+    k, d = ev["kind"], t - ev["start"]
+    alpha = R.clamp(d / 0.2) * R.clamp((ev["end"] - t) / 0.25)
+    if alpha <= 0.01:
+        return
+    f, acc = _factor(ev), colors["accent"][::-1]
+    y0 = float(ev["y"]) if ev.get("y") is not None else None
+    if k == "rotulo":
+        if not obj["n"]:
+            return
+        pn, pc, p, bar = f * 0.75 * H, f * 0.5 * H, 0.022 * H, max(6, 0.007 * H)
+        nh, ch_, gap = pn * 1.12, (f * 0.5 * H * 1.12 if obj["c"] else 0), (0.004 * H if obj["c"] else 0)
+        bh = 2 * p + nh + gap + ch_
+        bw = bar + 2 * p + max(obj["wn"], obj["wc"])
+        left, cy = 0.05 * W, H * (0.78 if y0 is None else y0)
+        top = cy - bh / 2
+        dx = -(1 - R.ease_out(R.clamp(d / 0.4))) * (bw + left)
+        _caja(dst, left + dx, top, left + dx + bw, top + bh, 0.012 * H, (0, 0, 0), alpha * 0.7)
+        _caja(dst, left + dx, top, left + dx + bar, top + bh, 0, acc, alpha)
+        tx = left + dx + bar + p
+        _blit_scaled(dst, obj["n"], tx + obj["wn"] / 2, top + p + nh / 2, alpha)
+        if obj["c"]:
+            _blit_scaled(dst, obj["c"], tx + obj["wc"] / 2, top + p + nh + gap + ch_ / 2, alpha)
+    elif k == "llamada":
+        if not obj["t"]:
+            return
+        px, p = f * 0.7 * H, 0.016 * H
+        pw, ph = obj["w"] + 3 * p, px * 1.12 + 2 * p
+        X, Y = float(ev.get("x", 0.7)) * W, (0.45 if y0 is None else y0) * H
+        cx = X + 0.2 * W if X < 0.5 * W else X - 0.2 * W
+        cx = min(max(cx, pw / 2 + 0.03 * W), W - pw / 2 - 0.03 * W)
+        cy = Y - 0.12 * H
+        u = R.ease_out(R.clamp((d - 0.1) / 0.35))
+        ax, ay = cx, cy + ph / 2
+        ov = dst.copy()
+        cv2.line(ov, (int(ax), int(ay)), (int(ax + (X - ax) * u), int(ay + (Y - ay) * u)), acc, max(int(0.004 * H), 3), cv2.LINE_AA)
+        cv2.circle(ov, (int(X), int(Y)), int(0.009 * H * u), acc, -1, cv2.LINE_AA)
+        cv2.addWeighted(ov, alpha, dst, 1 - alpha, 0, dst)
+        _caja(dst, cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2, ph / 2, acc, alpha)
+        _blit_scaled(dst, obj["t"], cx, cy, alpha)
+    elif k == "etiqueta":
+        if not obj["t"]:
+            return
+        px, p = f * 0.8 * H, 0.014 * H
+        pw, ph = obj["w"] + 4 * p, px * 1.12 + 2 * p
+        u = R.clamp(d / 0.3)
+        sc = 0.7 + 0.3 * u + 0.2 * math.sin(math.pi * u)
+        cx, cy = W / 2, H * (0.2 if y0 is None else y0)
+        _caja(dst, cx - pw * sc / 2, cy - ph * sc / 2, cx + pw * sc / 2, cy + ph * sc / 2, ph * sc / 2, acc, alpha)
+        _blit_scaled(dst, obj["t"], cx, cy, alpha, sc)
+    elif k == "seccion":
+        if not obj["t"]:
+            return
+        ov = dst.copy()
+        cv2.rectangle(ov, (0, 0), (W, H), (0, 0, 0), -1)
+        cv2.addWeighted(ov, alpha * 0.4, dst, 1 - alpha * 0.4, 0, dst)
+        yy = 0.45 if y0 is None else y0
+        rise = (1 - R.ease_out(R.clamp(d / 0.4))) * 0.03 * H
+        ta = alpha * R.clamp(d / 0.25)
+        if obj["n"]:
+            _blit_scaled(dst, obj["n"], W / 2, H * (yy - 0.03) + rise, ta)
+            _blit_scaled(dst, obj["t"], W / 2, H * (yy + 0.07) + rise, ta)
+        else:
+            _blit_scaled(dst, obj["t"], W / 2, H * yy + rise, ta)

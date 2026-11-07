@@ -38,7 +38,7 @@ def main():
     ap.add_argument("--hilos", type=int, default=0, help="0 = automático, 1 = un solo proceso")
     ap.add_argument("--tramo", default="", help="uso interno: k0:k1, fotogramas que dibuja este proceso")
     a = ap.parse_args()
-    proj = Path(a.carpeta)
+    proj = Path(a.carpeta).resolve()
     try:
         if a.accion in ("analizar", "voz"):
             if a.accion == "voz":
