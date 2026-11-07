@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 import render as R
 import cuts as cutmod
-from common import load, merge_style, ffmpeg_exe, probe, status, NOMINAL, cuadro_cover
+from common import load, merge_style, ffmpeg_exe, encoder_args, probe, status, NOMINAL, cuadro_cover
 
 
 def _keep(proj, plan):
@@ -106,7 +106,8 @@ def formato(proj, f, y=0.45, x=0.5):
     cx, cy, cw, ch = (n // 2 * 2 for n in (cx, cy, cw, ch))
     out = proj / f"final_{f}.mp4"
     status(proj, "formato", 20, f"Preparando {f.replace('x', ':')}")
-    subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(src), "-vf", f"crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=lanczos", "-c:v", "libx264", "-preset", "veryfast", "-crf", "17",
+    subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(src), "-vf", f"crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=lanczos", *encoder_args("final"),
                     "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", str(out)], check=True)
     status(proj, "listo", 100, out.name)
     return out
+

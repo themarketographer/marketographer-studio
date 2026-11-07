@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 import cv2, numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageFilter
-from common import FONTS, ffmpeg_exe, load, probe, status, merge_style, formato_de, encuadre_de, cuadro_cover, encuadrar, par
+from common import FONTS, correr_tramos, ffmpeg_exe, encoder_args, hilos_auto, load, probe, status, merge_style, formato_de, encuadre_de, cuadro_cover, encuadrar, par
 import plan as planmod
 import cuts as cutmod
 import audio as audiomod
@@ -540,15 +540,15 @@ def ensure_proxy(proj, medio=False):
     tmp = Path(proj) / "_proxy.mp4"
     esc = "scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2" if medio else "scale=trunc(iw/4)*2:trunc(ih/4)*2"
     subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(Path(proj) / "source.mp4"), "-vf", esc,
-                    "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-g", "15", "-pix_fmt", "yuv420p", str(tmp)], check=True)
+                    "-an", *encoder_args("medio"), "-g", "15", "-pix_fmt", "yuv420p", str(tmp)], check=True)
     tmp.replace(px)
     return px
 
 
 def reader(cap, acap, segs, W, H, q, fmt="9x16", fx=0.5, fy=0.4):
-    """Lee video y recorte por adelantado en otro hilo. segs: lista de (frame_inicio, frame_fin) que se conservan."""
+    """Lee video y recorte por adelantado en otro hilo. segs: lista de (frame_inicio, frame_fin, indice_del_tramo) que se conservan."""
     pos = None
-    for si, (a0, a1) in enumerate(segs):
+    for a0, a1, si in segs:
         if pos != a0:
             for c in (cap, acap):
                 c.set(cv2.CAP_PROP_POS_FRAMES, a0)
@@ -615,7 +615,45 @@ def tarjeta_cierre(enc, cierre, style, last, W, H, fps, colors, proj):
 
 # ---------------------------------------------------------------- render
 
-def run(proj, calidad="final", desde=0.0, hasta=None):
+def _trozo(segs, k0, k1):
+    """Parte de los fotogramas conservados (numerados de corrido) entre k0 y k1, como (frame_ini, frame_fin, indice_del_tramo)."""
+    out, n = [], 0
+    for si, (a, b) in enumerate(segs):
+        lo, hi = max(k0 - n, 0), min(k1 - n, b - a)
+        if lo < hi:
+            out.append((a + lo, a + hi, si))
+        n += b - a
+    return out
+
+
+def _fotograma(segs, k):
+    """(indice_del_tramo, frame_original) del fotograma conservado número k."""
+    for si, (a, b) in enumerate(segs):
+        if k < b - a:
+            return si, a + k
+        k -= b - a
+
+
+def _acc_previo(segs, facs, k0):
+    """Resto fraccionario de la cámara lenta tras los k0 fotogramas anteriores (para que un tramo arranque igual que el render seguido)."""
+    acc, n = 0.0, 0
+    for si, (a, b) in enumerate(segs):
+        for _ in range(min(b - a, k0 - n)):
+            acc += facs[si]
+            acc -= max(int(acc + 1e-6), 1)
+        n += b - a
+    return acc
+
+
+def paralelo(proj, calidad, desde, hasta, total, n, tmp):
+    """Reparte los fotogramas en n tramos, cada uno en su propio proceso, y los une sin recodificar."""
+    lim = [round(total * j / n) for j in range(n + 1)]
+    correr_tramos(proj, "render", [f"{lim[j]}:{lim[j + 1]}" for j in range(n)], ["--calidad", calidad, "--desde", str(desde), "--hasta", str(hasta)],
+                  total, lambda h: status(proj, "render", 92 * h / total, f"Fotograma {h} de {total}"), tmp)
+
+
+def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, hilos=None):
+    """tramo=(k0, k1) y salida: modo trabajador, dibuja solo esos fotogramas sin audio. hilos=1 fuerza el render en un solo proceso."""
     proj = Path(proj)
     plan = load(proj, "plan.json")
     style = merge_style(plan.get("style"))
@@ -649,6 +687,29 @@ def run(proj, calidad="final", desde=0.0, hasta=None):
         Ws, Hs = W0, H0
     _, _, cw, ch = cuadro_cover(Ws, Hs, fmt, fx, fy)
     W, H = par(cw), par(ch)
+    total = max(sum(b - a for a, b in segs), 1)
+    tmp = Path(salida) if tramo else proj / "_video.mp4"
+    cierre = merge_cierre(plan.get("cierre"))
+
+    def cerrar(extra):
+        final = proj / ("final.mp4" if calidad == "final" and desde == 0 and hasta >= dur - 0.1 else "preview.mp4")
+        sonidos = []
+        if style["sonidos"]:
+            sonidos += [(mapa.fuera(e["start"]), e.get("sfx", "none")) for e in events]
+            if style["sfxZoom"] != "none":
+                sonidos += [(mapa.fuera(z["t"]), style["sfxZoom"]) for z in zooms if z["level"] > 1.01 and mapa.vivo(z["t"])]
+        if extra and style["sonidos"]:
+            sonidos.append((mapa.total, style.get("sfxCierre", "ding")))
+        mux(proj, tmp, final, sonidos, keep, plan, fps, extra)
+        tmp.unlink(missing_ok=True)
+        status(proj, "listo", 100, final.name)
+        return final
+
+    n_h = hilos if hilos is not None else hilos_auto()
+    if not tramo and n_h > 1 and total >= 300:  # shortcut: por debajo de ~10 s no vale arrancar procesos; hilos=1 vuelve al modo de un solo proceso
+        paralelo(proj, calidad, desde, hasta, total, n_h, tmp)
+        return cerrar(max(int(round(cierre["dur"] * fps)), 1) / fps if cierre["on"] and hasta >= dur - 0.1 else 0.0)
+    k0, k1 = tramo if tramo else (0, total)
     cap, acap = cv2.VideoCapture(str(src)), cv2.VideoCapture(str(proj / "alpha.mp4"))
     colors = {"accent": hex_rgb(style["accent"]), "text": hex_rgb(style["text"])}
     sprites = {}
@@ -673,17 +734,27 @@ def run(proj, calidad="final", desde=0.0, hasta=None):
     bl_edge = None
     blur_w = clamp(float(style["desenfoque"]))
     zoom_alt = bool(cortes.get("on") and cortes.get("zoomAlterna"))
-    tmp = proj / "_video.mp4"
-    crf, preset = ("30", "ultrafast") if calidad == "borrador" else ("24", "veryfast") if calidad == "medio" else ("17", "veryfast")
     enc = subprocess.Popen([ffmpeg_exe(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-r", f"{fps}", "-i", "-",
-                            "-c:v", "libx264", "-crf", crf, "-preset", preset, "-pix_fmt", "yuv420p", str(tmp)], stdin=subprocess.PIPE)
+                            *encoder_args(calidad), "-pix_fmt", "yuv420p", str(tmp)], stdin=subprocess.PIPE)
     q = queue.Queue(maxsize=12)
-    threading.Thread(target=reader, args=(cap, acap, segs, W, H, q, fmt, fx, fy), daemon=True).start()
+    threading.Thread(target=reader, args=(cap, acap, _trozo(segs, k0, k1), W, H, q, fmt, fx, fy), daemon=True).start()
     cx_z, cy_z = W / 2, H * (0.38 if H > W else 0.45)
-    total = max(sum(b - a for a, b in segs), 1)
-    i = 0
-    acc_f, prev_out = 0.0, None
+
+    def escala(t, si):
+        s = zoom_scale(zooms, t, style["zoomEstilo"], style["zoomDeriva"])
+        if zoom_alt and orig[si] % 2 == 1:
+            s *= 1.1  # corte con zoom: disimula el salto entre un tramo y el siguiente
+        if sum(1 for m_ in puntos if m_ <= t) % 2 == 1:
+            s *= 1.12  # después de cada punto la escena cambia de plano
+        return s
+
+    # Un tramo arranca con el mismo estado que tendría el render seguido: contador de grano, resto de cámara lenta y zoom del fotograma anterior.
+    i = peli.n = k0
+    acc_f, prev_out = _acc_previo(segs, facs, k0), None
     s_prev, mb = 1.0, float(style.get("motionBlur", 0))
+    if k0:
+        so, fo = _fotograma(segs, k0 - 1)
+        s_prev = escala(fo / fps, so)
     while True:
         item = q.get()
         if item is None:
@@ -691,11 +762,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None):
         f, a, fi, si = item
         t = fi / fps
         f = apply_look(f)
-        s = zoom_scale(zooms, t, style["zoomEstilo"], style["zoomDeriva"])
-        if zoom_alt and orig[si] % 2 == 1:
-            s *= 1.1  # corte con zoom: disimula el salto entre un tramo y el siguiente
-        if sum(1 for m_ in puntos if m_ <= t) % 2 == 1:
-            s *= 1.12  # después de cada punto la escena cambia de plano
+        s = escala(t, si)
         if s > 1.001:
             M = np.float32([[s, 0, cx_z * (1 - s)], [0, s, cy_z * (1 - s)]])
             f = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
@@ -813,27 +880,20 @@ def run(proj, calidad="final", desde=0.0, hasta=None):
                 enc.stdin.write(memoryview(out))
         prev_out = out
         if i % 15 == 0:
-            status(proj, "render", 92 * i / total, f"Fotograma {i} de {total}")
+            if tramo:
+                Path(str(tmp) + ".prog").write_text(str(i - k0))
+            else:
+                status(proj, "render", 92 * i / total, f"Fotograma {i} de {total}")
         i += 1
     cap.release(); acap.release()
-    cierre = merge_cierre(plan.get("cierre"))
     extra = 0.0
-    if cierre["on"] and hasta >= dur - 0.1 and i > 0:
+    if cierre["on"] and hasta >= dur - 0.1 and i > k0 and (not tramo or k1 >= total):  # la tarjeta final la dibuja solo el último tramo
         n_c = tarjeta_cierre(enc, cierre, style, out, W, H, fps, colors, proj)
         extra = n_c / fps
     enc.stdin.close(); enc.wait()
-    final = proj / ("final.mp4" if calidad == "final" and desde == 0 and hasta >= dur - 0.1 else "preview.mp4")
-    sonidos = []
-    if style["sonidos"]:
-        sonidos += [(mapa.fuera(e["start"]), e.get("sfx", "none")) for e in events]
-        if style["sfxZoom"] != "none":
-            sonidos += [(mapa.fuera(z["t"]), style["sfxZoom"]) for z in zooms if z["level"] > 1.01 and mapa.vivo(z["t"])]
-    if extra and style["sonidos"]:
-        sonidos.append((mapa.total, style.get("sfxCierre", "ding")))
-    mux(proj, tmp, final, sonidos, keep, plan, fps, extra)
-    tmp.unlink(missing_ok=True)
-    status(proj, "listo", 100, final.name)
-    return final
+    if tramo:
+        return None
+    return cerrar(extra)
 
 
 KIND_Y = {"lista": 0.40, "conexion": 0.30, "numero": 0.42, "barras": 0.36}

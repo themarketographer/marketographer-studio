@@ -11,7 +11,7 @@ from common import status
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn"])
+    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn", "matte"])
     ap.add_argument("carpeta")
     ap.add_argument("--calidad", default="final", choices=["borrador", "medio", "final"])
     ap.add_argument("--desde", type=float, default=0.0)
@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--c1", default="")
     ap.add_argument("--c2", default="")
     ap.add_argument("--imagen", default="")
+    ap.add_argument("--hilos", type=int, default=0, help="0 = automático, 1 = un solo proceso")
+    ap.add_argument("--tramo", default="", help="uso interno: k0:k1, fotogramas que dibuja este proceso")
     a = ap.parse_args()
     proj = Path(a.carpeta)
     try:
@@ -49,6 +51,9 @@ def main():
             import render
             render.ensure_proxy(proj)
             status(proj, "analizado", 100, "Listo para editar")
+        elif a.accion == "matte":  # uso interno: un tramo del recorte, lanzado por matte.run en paralelo
+            import matte
+            matte.run(proj, tramo=tuple(int(n) if n else None for n in a.tramo.split(":")), salida=a.salida)
         elif a.accion == "portada":
             import portada
             portada.run(proj, a.t, a.texto, a.pos, a.size, a.color, a.y if a.y >= 0 else None, a.salida)
@@ -84,7 +89,8 @@ def main():
             plan.run(proj, a.solo)
         else:
             import render
-            render.run(proj, a.calidad, a.desde, a.hasta)
+            tramo = tuple(int(n) for n in a.tramo.split(":")) if a.tramo else None
+            render.run(proj, a.calidad, a.desde, a.hasta, tramo=tramo, salida=a.salida if tramo else None, hilos=a.hilos or None)
     except Exception as e:
         traceback.print_exc()
         status(proj, "error", 0, str(e), error=str(e))
