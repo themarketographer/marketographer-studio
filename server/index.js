@@ -144,7 +144,7 @@ http.createServer(async (req, res) => {
     const mm = /^\/m\/([a-z0-9-]+)\/(.+)$/.exec(url.pathname);
     if (mm) {
       const rel = mm[2];
-      if (!/^(ui\.js|ui\.css|live\.js|exportar-ui\.js|meter\.js|timeline\.js|inspector\.js|assets\/.+)$/.test(rel)) return send(res, 404, { error: 'No encontrado' });
+      if (!/^(ui\.js|ui\.css|live\.js|exportar-ui\.js|keyframes\.js|meter\.js|timeline\.js|inspector\.js|assets\/.+)$/.test(rel)) return send(res, 404, { error: 'No encontrado' });
       return serveFile(res, path.join(modulesDir, mm[1], rel), req);
     }
     const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);

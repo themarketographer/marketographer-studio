@@ -1,3 +1,4 @@
+import { kfValor, kfPoner } from './keyframes.js';
 // Vista en vivo: dibuja el video con títulos, subtítulos, zooms, looks y cortes en el navegador, al momento de cambiar un ajuste.
 // Es una copia fiel del motor de render (mismas proporciones, mismas animaciones). La vista previa generada sigue siendo la versión exacta.
 
@@ -159,8 +160,8 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   const RULETA = { POR_PALABRA: 0.14, BASE: 0.25, REBOTE: 0.04, ASENTAR: 0.18, DESENFOQUE: 0.10 };
 
   // Opacidad del evento (ev.opacidad, 0-1): el código de dibujo fija globalAlpha a su manera, así que se intercepta el ajuste y se multiplica.
-  function conOp(c, e, fn) {
-    const o = Math.min(Math.max(Number(e.opacidad ?? 1), 0), 1);
+  function conOp(c, e, fn, t = e.start) {
+    const o = Math.min(Math.max(Number(kfValor(e, 'opacidad', t - e.start, e.opacidad ?? 1)), 0), 1);
     if (!(o < 0.999)) return fn();  // opacidad completa o valor inválido (NaN): se dibuja normal
     const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'globalAlpha');
     d.set.call(c, d.get.call(c) * o);
@@ -453,7 +454,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   function dibujarSticker(c, ev, t) {
     const im = imgEscena(ev.archivo); if (!im) return;
     const d = t - ev.start, tail = ev.end - t; if (d < 0 || tail <= 0) return;
-    const w = Math.max(ev.ancho || 0.3, 0.03) * W, hh = w * im.naturalHeight / im.naturalWidth, op = ev.op ?? 1;
+    const w = Math.max(kfValor(ev, 'ancho', d, ev.ancho || 0.3), 0.03) * W, hh = w * im.naturalHeight / im.naturalWidth, op = kfValor(ev, 'op', d, ev.op ?? 1);
     let sc = 1, dy = 0, al = 1, bl = 0, rev = 1;
     if (!ev.fija) {
       const e = estadoEntrada(ev.anim || 'pop', d), v = 1 - clamp(tail / 0.25), sal = ev.salida || 'fade';
@@ -461,7 +462,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     }
     if (al <= 0.01) return;
     c.save(); c.globalAlpha = op * al; if (bl > 0.5) c.filter = `blur(${bl}px)`;
-    c.translate(W * (ev.x ?? 0.5), H * ((ev.y ?? 0.3) + dy)); c.rotate((ev.rot || 0) * Math.PI / 180); c.scale(Math.max(sc, 0.05), Math.max(sc, 0.05));
+    c.translate(W * kfValor(ev, 'x', d, ev.x ?? 0.5), H * (kfValor(ev, 'y', d, ev.y ?? 0.3) + dy)); c.rotate(kfValor(ev, 'rot', d, ev.rot || 0) * Math.PI / 180); c.scale(Math.max(sc, 0.05), Math.max(sc, 0.05));
     if (rev < 1) { c.beginPath(); c.rect(-w / 2, -hh / 2, w * rev, hh); c.clip(); }
     c.drawImage(im, -w / 2, -hh / 2, w, hh); c.restore();
   }
@@ -492,11 +493,11 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const al = clamp(d / 0.2) * clamp(tail / 0.25); if (al <= 0.01) return;
     c.save(); c.globalAlpha = al;
     if (ev.modo === 'ventana') {
-      const w = Math.max(ev.ancho || 0.5, 0.05) * W, hh = w * vh / vw, x0 = W * (ev.x ?? 0.5) - w / 2, y0 = H * (ev.y ?? 0.3) - hh / 2;
+      const w = Math.max(kfValor(ev, 'ancho', d, ev.ancho || 0.5), 0.05) * W, hh = w * vh / vw, x0 = W * kfValor(ev, 'x', d, ev.x ?? 0.5) - w / 2, y0 = H * kfValor(ev, 'y', d, ev.y ?? 0.3) - hh / 2;
       c.beginPath(); c.roundRect(x0, y0, w, hh, Math.min(w, hh) * 0.06); c.clip(); c.drawImage(el, x0, y0, w, hh);
     } else {
-      const sc = Math.max(W / vw, H / vh), w = vw * sc, hh = vh * sc;
-      c.drawImage(el, (W - w) / 2, (H - hh) / 2, w, hh);
+      const sc = Math.max(W / vw, H / vh) * Math.max(kfValor(ev, 'escala', d, ev.escala || 1), 1), w = vw * sc, hh = vh * sc;  // escala > 1 acerca; x e y eligen qué parte se ve
+      c.drawImage(el, -(w - W) * kfValor(ev, 'fx', d, ev.fx ?? 0.5), -(hh - H) * kfValor(ev, 'fy', d, ev.fy ?? 0.5), w, hh);
     }
     c.restore();
   }
@@ -930,7 +931,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
         ectx.globalAlpha = 1; ectx.globalCompositeOperation = 'destination-in'; ectx.fillStyle = g; ectx.fillRect(0, 0, W, H); ectx.restore();
         lctx.save(); lctx.globalAlpha = clamp(fuerzaMb * Math.min(mb * 1.6, 1)); lctx.drawImage(edgeC, 0, 0); lctx.restore();
       }
-      back.forEach((e) => conOp(lctx, e, () => dibujarTitulo(lctx, e, t, st)));
+      back.forEach((e) => conOp(lctx, e, () => dibujarTitulo(lctx, e, t, st), t));
       recortar(s);
       ctx.drawImage(layerC, 0, 0); ctx.drawImage(subjC, 0, 0);
     } else {
@@ -943,7 +944,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     viñeta(ctx, st);
     clipVistos.clear();
     const fondoDe = (e) => (e.kind === 'seccion' || (e.kind === 'clip' && e.modo !== 'ventana') ? 1 : 0);  // lo que cubre la pantalla va debajo de lo demás
-    front.filter((e) => e.kind !== 'punto').sort((x, y) => fondoDe(y) - fondoDe(x)).forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
+    front.filter((e) => e.kind !== 'punto').sort((x, y) => fondoDe(y) - fondoDe(x)).forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st)), t));
     clipEls.forEach((el, n) => { if (!clipVistos.has(n) && el.tagName === 'VIDEO' && !el.paused) el.pause(); });
     dibujarSubs(ctx, t, st, events, 0);
     front.filter((e) => e.kind === 'punto').forEach((e) => dibujarKind(ctx, e, t, st));
@@ -1066,8 +1067,9 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const t = vs.currentTime || 0, out = [];
     (P.events || []).filter((e) => e.start - 0.02 <= t && t < e.end && e.kind !== 'punto').forEach((e) => {
       const base = e.kind ? (KIND_Y[e.kind] ?? 0.4) : (POS_Y[e.pos] ?? 0.3);
-      if (e.kind === 'clip') { if (e.modo === 'ventana') out.push({ y: e.y ?? 0.3, x: e.x ?? 0.5, min: 0.04, max: 0.95, set: (v) => { e.y = v; }, setX: (v) => { e.x = v; } }); return; }
-      if (e.kind === 'sticker') out.push({ y: e.y ?? base, x: e.x ?? 0.5, min: 0.04, max: 0.95, set: (v) => { e.y = v; }, setX: (v) => { e.x = v; } });
+      const d = t - e.start;
+      if (e.kind === 'clip') { if (e.modo === 'ventana') out.push({ y: kfValor(e, 'y', d, e.y ?? 0.3), x: kfValor(e, 'x', d, e.x ?? 0.5), min: 0.04, max: 0.95, set: (v) => kfPoner(e, 'y', v, d, { x: e.x ?? 0.5, y: e.y ?? 0.3, ancho: e.ancho ?? 0.5 }), setX: (v) => kfPoner(e, 'x', v, d, { x: e.x ?? 0.5, y: e.y ?? 0.3, ancho: e.ancho ?? 0.5 }) }); return; }
+      if (e.kind === 'sticker') out.push({ y: kfValor(e, 'y', d, e.y ?? base), x: kfValor(e, 'x', d, e.x ?? 0.5), min: 0.04, max: 0.95, set: (v) => kfPoner(e, 'y', v, d, { x: e.x ?? 0.5, y: e.y ?? base, ancho: e.ancho ?? 0.3, rot: e.rot || 0, op: e.op ?? 1 }), setX: (v) => kfPoner(e, 'x', v, d, { x: e.x ?? 0.5, y: e.y ?? base, ancho: e.ancho ?? 0.3, rot: e.rot || 0, op: e.op ?? 1 }) });
       else out.push({ y: e.y ?? ajustes.get(e) ?? base, min: 0.08, max: 0.85, set: (v) => { e.y = v; } });
     });
     const s = P.style.subs;

@@ -83,6 +83,7 @@ export function crearTimeline({ h, getFiltros = () => [], getPlan, getWords, get
     }
     const m = P.audio && P.audio.musica;
     if (m && m.archivo) kids.push(h('i', { class: 'lt-musica', title: 'Música de fondo', style: `left:0;width:${xDe(d)}px;top:238px` }, 'música'));
+    for (const e of P.events || []) for (const k of e.kf || []) kids.push(h('i', { class: 'lt-kf', title: `Fotograma clave en ${R2(k.t).toString().replace('.', ',')} s`, style: `left:${xDe(e.start + k.t) - 5}px;top:${!e.kind || e.kind === 'frase' ? 22 : 56}px` }, '◆'));
     for (const l of P.lentos || []) kids.push(bloque('lt-lento', l.start, l.end, 148, 32, 'lenta', l, 'lento', `Cámara lenta ${seg(l.start, l.end)}`));
     for (const f of P.filtros || []) if (f.start != null) { const n = (getFiltros().find((x) => x.id === f.filtro) || {}).n || f.filtro; kids.push(bloque('lt-fil', f.start, f.end, 182, 32, n, f, 'filtro', `Filtro ${n}, ${seg(f.start, f.end)}`)); }
     for (const z of P.zooms || []) kids.push(bloque('lt-zoom', z.t, z.t, 152, 24, '', z, 'zoom', `Zoom en el segundo ${R2(z.t)}`));

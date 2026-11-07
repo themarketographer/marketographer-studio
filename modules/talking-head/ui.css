@@ -506,3 +506,4 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .filtro-mini { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-200); color: var(--ink); cursor: pointer; font-size: 12px; }
 .filtro-mini:hover { border-color: var(--accent); } .filtro-mini canvas { width: 100%; height: auto; border-radius: 6px; }
 .lt-clip { background: #ff7a9a; }
+.lt-kf { position: absolute; font-style: normal; font-size: 10px; line-height: 10px; color: var(--ink); text-shadow: 0 0 2px var(--surface-200); z-index: 3; pointer-events: none; }

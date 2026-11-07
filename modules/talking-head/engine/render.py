@@ -836,7 +836,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             def pon_detras(layer, back=back, t=t):  # los textos "detrás de ti" se dibujan sobre el fondo, en CPU
                 layer = layer.copy()
                 for e in back:
-                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
+                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H), t)
                 return layer
             out = G.frame(f, a, s, cx_z, cy_z, ops, w_, osc, pon_detras if back else None, mbp, bn_w)
         if out is None:
@@ -884,7 +884,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             if back:
                 layer = layer.copy()
                 for e in back:
-                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
+                    con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H), t)
             if layer is f:  # sin desenfoque ni textos detrás de ti, f y layer son iguales: mezclarlos no cambia nada
                 out = f
             else:
@@ -897,9 +897,9 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             if e.get("kind") == "punto":
                 continue
             if e.get("kind") in graf.TIPOS:
-                con_opacidad(out, e, lambda e=e: graf.dibujar(out, e, sprites[e["id"]], t, W, H, colors))
+                con_opacidad(out, e, lambda e=e: graf.dibujar(out, e, sprites[e["id"]], t, W, H, colors), t)
             else:
-                con_opacidad(out, e, lambda e=e: draw_event(out, sprites[e["id"]], e, t, W, H))
+                con_opacidad(out, e, lambda e=e: draw_event(out, sprites[e["id"]], e, t, W, H), t)
         if chunks:
             while ci < len(chunks) - 1 and chunks[ci]["end"] <= t:
                 ci += 1
@@ -1038,10 +1038,10 @@ def evitar_solapes(events, sprites, style, H):
 
 
 
-def con_opacidad(dst, e, fn):
+def con_opacidad(dst, e, fn, t=None):
     # opacidad del evento (0-1): se dibuja normal y se mezcla con lo que había debajo
     try:
-        o = min(max(float(e.get("opacidad", 1)), 0.0), 1.0)
+        o = min(max(float(graf.kf_valor(e, "opacidad", (t - e["start"]) if t is not None else 0.0, e.get("opacidad", 1))), 0.0), 1.0)
     except (TypeError, ValueError):
         o = 1.0
     if o != o:  # NaN

@@ -96,6 +96,28 @@ def _fondo_escena(ev, W, H):
     return None
 
 
+def kf_valor(ev, prop, d, base):
+    """Valor de una propiedad animada con fotogramas clave en el instante d (segundos desde que empieza el elemento).
+    Misma fórmula que keyframes.js (kfValor): smoothstep entre fotogramas, quieto antes del primero y después del último."""
+    ks = sorted((k for k in (ev.get("kf") or []) if k.get(prop) is not None), key=lambda k: k["t"])
+    if not ks:
+        return base
+    if d <= ks[0]["t"]:
+        return ks[0][prop]
+    if d >= ks[-1]["t"]:
+        return ks[-1][prop]
+    for a, b in zip(ks, ks[1:]):
+        if d <= b["t"]:
+            f = (d - a["t"]) / max(b["t"] - a["t"], 1e-6)
+            e = f * f * (3 - 2 * f)
+            return a[prop] + (b[prop] - a[prop]) * e
+    return ks[-1][prop]
+
+
+def _anima_ancho_rot(ev):
+    return any(k.get("ancho") is not None or k.get("rot") is not None for k in (ev.get("kf") or []))
+
+
 def _preparar_sticker(ev, W, H):
     """Imagen con transparencia (png) a su tamaño final. Devuelve (rgb, alfa) o None si no se encuentra."""
     if not ESCENAS:
@@ -107,9 +129,12 @@ def _preparar_sticker(ev, W, H):
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     if img.shape[2] == 3:
         img = np.dstack([img, np.full(img.shape[:2], 255, np.uint8)])
-    k = max(float(ev.get("ancho", 0.3)), 0.03) * W / img.shape[1]
+    anchos = [float(ev.get("ancho", 0.3))] + [float(k["ancho"]) for k in (ev.get("kf") or []) if k.get("ancho") is not None]
+    k = max(max(anchos), 0.03) * W / img.shape[1]  # con animación se prepara al ancho mayor y se achica al dibujar
     img = cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_AREA if k < 1 else cv2.INTER_CUBIC)
     rot = float(ev.get("rot", 0) or 0)
+    if _anima_ancho_rot(ev):
+        return img[..., :3].copy(), img[..., 3].copy(), max(max(anchos), 0.03)  # tercer dato: ancho (fracción de W) de este sprite; el giro se hace al dibujar
     if abs(rot) > 0.1:
         h0, w0 = img.shape[:2]
         c, sn = abs(math.cos(math.radians(rot))), abs(math.sin(math.radians(rot)))
@@ -127,9 +152,9 @@ def _dibujar_sticker(dst, ev, obj, t, W, H):
     d, tail = t - ev["start"], ev["end"] - t
     if d < 0 or tail <= 0:
         return
-    op = float(ev.get("op", 1.0))
+    op = kf_valor(ev, "op", d, float(ev.get("op", 1.0)))
     if ev.get("fija"):  # marca de agua: sin animación, siempre visible
-        _blit_scaled(dst, obj, W * float(ev.get("x", 0.85)), H * float(ev.get("y", 0.08)), op, 1.0)
+        _blit_scaled(dst, obj[:2], W * float(ev.get("x", 0.85)), H * float(ev.get("y", 0.08)), op, 1.0)
         return
     sc, dy, al, rev, bl = _estado_entrada(ev.get("anim", "pop"), d)
     salida = ev.get("salida", "fade")
@@ -140,14 +165,25 @@ def _dibujar_sticker(dst, ev, obj, t, W, H):
     al *= 1 - v if salida != "corte" else 1.0
     if al <= 0.01:
         return
-    rgb, a = obj
+    rgb, a = obj[0], obj[1]
+    if len(obj) > 2:  # con fotogramas clave en tamaño o giro: se achica y se gira aquí
+        ancho_t, rot_t = max(kf_valor(ev, "ancho", d, float(ev.get("ancho", 0.3))), 0.03), kf_valor(ev, "rot", d, float(ev.get("rot", 0) or 0))
+        k = ancho_t / obj[2]
+        h0, w0 = rgb.shape[:2]
+        c_, s_ = abs(math.cos(math.radians(rot_t))), abs(math.sin(math.radians(rot_t)))
+        nw, nh = max(int((w0 * c_ + h0 * s_) * k) + 2, 2), max(int((h0 * c_ + w0 * s_) * k) + 2, 2)
+        M = cv2.getRotationMatrix2D((w0 / 2, h0 / 2), rot_t, k)
+        M[0, 2] += nw / 2 - w0 / 2  # el centro del sprite va al centro del lienzo nuevo
+        M[1, 2] += nh / 2 - h0 / 2
+        img4 = cv2.warpAffine(np.dstack([rgb, a]), M, (nw, nh), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+        rgb, a = img4[..., :3].copy(), img4[..., 3].copy()
     if bl > 0.5:
         kb = int(bl) | 1
         rgb, a = cv2.GaussianBlur(rgb, (kb, kb), 0), cv2.GaussianBlur(a, (kb, kb), 0)
     if rev < 1:
         a = a.copy()
         a[:, int(a.shape[1] * rev):] = 0
-    _blit_scaled(dst, (rgb, a), W * float(ev.get("x", 0.5)), H * (float(ev.get("y", 0.3)) + dy + dy_s), op * min(al, 1.0), max(sc, 0.05))
+    _blit_scaled(dst, (rgb, a), W * kf_valor(ev, "x", d, float(ev.get("x", 0.5))), H * (kf_valor(ev, "y", d, float(ev.get("y", 0.3))) + dy + dy_s), op * min(al, 1.0), max(sc, 0.05))
 
 
 def preparar(ev, style, W, H, colors):
@@ -736,10 +772,10 @@ def _dibujar_clip(dst, ev, obj, t, W, H):
         return
     fh, fw = fr.shape[:2]
     if ev.get("modo") == "ventana":
-        w = max(int(round(max(float(ev.get("ancho", 0.5)), 0.05) * W)), 8)
+        w = max(int(round(max(kf_valor(ev, "ancho", d, float(ev.get("ancho", 0.5))), 0.05) * W)), 8)
         h = max(int(round(w * fh / fw)), 8)
         img = cv2.resize(fr, (w, h), interpolation=cv2.INTER_AREA if w < fw else cv2.INTER_LINEAR)
-        x0, y0 = int(round(W * float(ev.get("x", 0.5)) - w / 2)), int(round(H * float(ev.get("y", 0.3)) - h / 2))
+        x0, y0 = int(round(W * kf_valor(ev, "x", d, float(ev.get("x", 0.5))) - w / 2)), int(round(H * kf_valor(ev, "y", d, float(ev.get("y", 0.3))) - h / 2))
         from PIL import Image, ImageDraw
         m = Image.new("L", (w, h), 0)
         ImageDraw.Draw(m).rounded_rectangle((0, 0, w - 1, h - 1), radius=int(min(w, h) * 0.06), fill=255)
@@ -751,8 +787,9 @@ def _dibujar_clip(dst, ev, obj, t, W, H):
         roi = dst[Y0:Y1, X0:X1].astype(np.float32)
         dst[Y0:Y1, X0:X1] = (roi * (1 - a) + img[Y0 - y0:Y1 - y0, X0 - x0:X1 - x0].astype(np.float32) * a).astype(np.uint8)
     else:
-        sc = max(W / fw, H / fh)
+        sc = max(W / fw, H / fh) * max(kf_valor(ev, "escala", d, float(ev.get("escala", 1) or 1)), 1.0)  # escala > 1 acerca; fx y fy eligen qué parte se ve
         nw, nh = max(int(round(fw * sc)), W), max(int(round(fh * sc)), H)
         img = cv2.resize(fr, (nw, nh), interpolation=cv2.INTER_AREA if sc < 1 else cv2.INTER_LINEAR)
-        x0, y0 = (nw - W) // 2, (nh - H) // 2
+        fx_, fy_ = kf_valor(ev, "fx", d, float(ev.get("fx", 0.5))), kf_valor(ev, "fy", d, float(ev.get("fy", 0.5)))
+        x0, y0 = int(round((nw - W) * min(max(fx_, 0), 1))), int(round((nh - H) * min(max(fy_, 0), 1)))
         cv2.addWeighted(dst, 1 - al, img[y0:y0 + H, x0:x0 + W], al, 0, dst)

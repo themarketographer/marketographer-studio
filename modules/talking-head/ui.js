@@ -2,6 +2,7 @@
 import { hojaExportar } from './exportar-ui.js';
 import { crearMedidor } from './meter.js';
 import { crearTimeline } from './timeline.js';
+import { kfValor, kfPoner, kfFijar, kfActivar } from './keyframes.js';
 import { cuerpoPropiedades } from './inspector.js';
 const POS = [['detras', 'Detrás de ti'], ['arriba', 'Arriba'], ['centro', 'Centro'], ['abajo', 'Abajo']];
 const TAM = [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];
@@ -779,7 +780,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => live && live.ir(t), onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
@@ -2255,16 +2256,33 @@ Lo que necesito de ti:
     xhr.onerror = () => toast('No pude subir la imagen. Revisa que el Estudio siga abierto.');
     xhr.send(file);
   }
+  // ----- Fotogramas clave: animar posición, tamaño, giro o transparencia de un sticker o de un B-roll -----
+  const relAhora = (ev) => +(tiempoActual() - ev.start).toFixed(2);
+  const kfS = (ev, prop, label, mn, mx, step, base, show, valores) => slider(label, mn, mx, step, kfValor(ev, prop, relAhora(ev), base), show, (v) => { kfPoner(ev, prop, v, relAhora(ev), valores); cambio(); }, base);
+  function bloqueAnimacion(ev, valores) {
+    const ks = ev.kf || [];
+    if (!ks.length) return h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Animación'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { kfActivar(ev, valores); refrescar(); toast('Animación activada. Mueve el video a otro momento, cambia los ajustes y se guarda un fotograma ahí.'); } }, '◆ Animar con fotogramas clave'));
+    return h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Fotogramas clave'),
+      h('ul', { class: 'evs' }, ks.map((k, i) => h('li', { class: 'ev' }, h('div', { class: 'ev-top' }, h('span', { class: 'tiempo' }, `◆ ${String(k.t.toFixed(2)).replace('.', ',')} s`),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => irA(ev.start + k.t) }, 'Ir'),
+        h('button', { type: 'button', class: 'btn danger sm', onclick: () => { ev.kf.splice(i, 1); if (ev.kf.length < 1) delete ev.kf; refrescar(); } }, 'Quitar'))))),
+      h('div', { class: 'row-gap' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { kfFijar(ev, relAhora(ev), valores); refrescar(); } }, '◆ Fijar fotograma aquí'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { delete ev.kf; refrescar(); } }, 'Quitar la animación')),
+      h('small', { class: 'hint' }, 'Entre fotogramas se mueve suave. Cambiar un ajuste en otro momento crea un fotograma ahí.'));
+  }
   function cuerpoSticker(ev) {
-    const dur = plan().duration || 0;
+    const dur = plan().duration || 0, V = { x: ev.x ?? 0.5, y: ev.y ?? 0.3, ancho: ev.ancho ?? 0.3, rot: ev.rot ?? 0, op: ev.op ?? 1 };
     return [
       ev.fija ? null : bloqueTiempos(ev),
       h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Imagen'), h('div', { class: 'chips stk' }, ESCIMG.map((f) => h('button', { type: 'button', class: 'chip stk-i' + (ev.archivo === f.nombre ? ' on' : ''), 'aria-pressed': String(ev.archivo === f.nombre), title: f.nombre, onclick: () => { ev.archivo = f.nombre; refrescar(); } }, h('img', { src: escenaUrl(f.nombre), alt: f.nombre, loading: 'lazy' }))))),
-      slider('Tamaño', 0.05, 1, 0.01, ev.ancho ?? 0.3, (v) => `${Math.round(v * 100)}% del ancho`, (v) => { ev.ancho = v; cambio(); }, 0.3),
-      slider('Posición a lo ancho', 0, 1, 0.01, ev.x ?? 0.5, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.5),
-      slider('Posición a lo alto', 0, 1, 0.01, ev.y ?? 0.3, (v) => `${Math.round(v * 100)}%`, (v) => { ev.y = v; cambio(); }, 0.3),
-      slider('Giro', -45, 45, 1, ev.rot ?? 0, (v) => `${Math.round(v)} grados`, (v) => { ev.rot = v; cambio(); }, 0),
-      slider('Opacidad', 0.1, 1, 0.01, ev.op ?? 1, (v) => `${Math.round(v * 100)}%`, (v) => { ev.op = v; cambio(); }, 1),
+      kfS(ev, 'ancho', 'Tamaño', 0.05, 1, 0.01, V.ancho, (v) => `${Math.round(v * 100)}% del ancho`, V),
+      kfS(ev, 'x', 'Posición a lo ancho', 0, 1, 0.01, V.x, (v) => `${Math.round(v * 100)}%`, V),
+      kfS(ev, 'y', 'Posición a lo alto', 0, 1, 0.01, V.y, (v) => `${Math.round(v * 100)}%`, V),
+      kfS(ev, 'rot', 'Giro', -45, 45, 1, V.rot, (v) => `${Math.round(v)} grados`, V),
+      kfS(ev, 'op', 'Opacidad', 0.1, 1, 0.01, V.op, (v) => `${Math.round(v * 100)}%`, V),
+      ev.fija ? null : bloqueAnimacion(ev, V),
       toggle('Marca de agua: se ve todo el video, sin animación', !!ev.fija, (v) => { ev.fija = v; if (v) { ev.start = 0; ev.end = +dur.toFixed(2); ev.op = Math.min(ev.op ?? 1, 0.85); } refrescar(); }),
       ev.fija ? null : seg('Animación de entrada', Object.entries(ANIM_NOM), ev.anim || 'pop', (v) => { ev.anim = v; refrescar(); }),
       ev.fija ? null : seg('Salida', SALIDAS.filter((x) => x[0] !== 'auto'), ev.salida || 'fade', (v) => { ev.salida = v; refrescar(); }),
@@ -2335,15 +2353,19 @@ Lo que necesito de ti:
       n ? h('small', { class: 'hint' }, `Tienes ${n} en el video. Edítalos en Todas mis capas o toca el bloque en la línea de tiempo.`) : null);
   }
   function cuerpoClip(ev) {
+    const ven = ev.modo === 'ventana', V = ven ? { x: ev.x ?? 0.5, y: ev.y ?? 0.3, ancho: ev.ancho ?? 0.5, opacidad: 1 } : { fx: ev.fx ?? 0.5, fy: ev.fy ?? 0.5, escala: ev.escala ?? 1, opacidad: 1 };
+    const pc = (v) => `${Math.round(v * 100)}%`;
     return [bloqueTiempos(ev),
       h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Archivo'), h('select', { onchange: (e) => { ev.archivo = e.target.value; ev.text = ev.archivo; ev.desde = 0; refrescar(); } },
         BROLLS.map((f) => h('option', { value: f.nombre, selected: f.nombre === ev.archivo }, f.nombre)))),
       seg('Cómo se ve', [['pantalla', 'Pantalla completa'], ['ventana', 'En una ventana']], ev.modo || 'pantalla', (v) => { ev.modo = v; refrescar(); }),
       esVideoBroll(ev.archivo) ? h('label', { class: 'mini-f' }, 'Empezar el clip en el segundo', h('input', { type: 'number', step: '0.1', min: 0, value: ev.desde || 0, onchange: (e) => { ev.desde = Math.max(0, +e.target.value); cambio(); } })) : null,
-      esVideoBroll(ev.archivo) ? slider('Sonido del clip', 0, 1, 0.05, ev.vol ?? 0, (v) => (v < 0.03 ? 'Sin sonido' : `${Math.round(v * 100)}%`), (v) => { ev.vol = v; cambio(); }, 0) : null,
-      ev.modo === 'ventana' ? slider('Tamaño de la ventana', 0.15, 1, 0.01, ev.ancho ?? 0.5, (v) => `${Math.round(v * 100)}% del ancho`, (v) => { ev.ancho = v; cambio(); }, 0.5) : null,
-      ev.modo === 'ventana' ? slider('Posición a lo ancho', 0, 1, 0.01, ev.x ?? 0.5, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.5) : null,
-      ev.modo === 'ventana' ? slider('Posición a lo alto', 0, 1, 0.01, ev.y ?? 0.3, (v) => `${Math.round(v * 100)}%`, (v) => { ev.y = v; cambio(); }, 0.3) : null];
+      esVideoBroll(ev.archivo) ? slider('Sonido del clip', 0, 1, 0.05, ev.vol ?? 0, (v) => (v < 0.03 ? 'Sin sonido' : pc(v)), (v) => { ev.vol = v; cambio(); }, 0) : null,
+      ven ? kfS(ev, 'ancho', 'Tamaño de la ventana', 0.15, 1, 0.01, V.ancho, (v) => `${pc(v)} del ancho`, V) : kfS(ev, 'escala', 'Acercar (zoom)', 1, 3, 0.05, V.escala, (v) => `${Number(v).toFixed(2)}x`, V),
+      ven ? kfS(ev, 'x', 'Posición a lo ancho', 0, 1, 0.01, V.x, pc, V) : kfS(ev, 'fx', 'Encuadre a lo ancho (con zoom)', 0, 1, 0.01, V.fx, pc, V),
+      ven ? kfS(ev, 'y', 'Posición a lo alto', 0, 1, 0.01, V.y, pc, V) : kfS(ev, 'fy', 'Encuadre a lo alto (con zoom)', 0, 1, 0.01, V.fy, pc, V),
+      kfS(ev, 'opacidad', 'Opacidad', 0, 1, 0.01, 1, pc, V),
+      bloqueAnimacion(ev, V)];
   }
   function seccionSticker() {
     const input = h('input', { type: 'file', accept: '.png,.webp,.jpg,.jpeg,image/*', hidden: true, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) subirSticker(f, (n) => { agregarSticker(n, false); }); } });
