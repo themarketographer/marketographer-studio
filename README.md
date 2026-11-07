@@ -2,12 +2,16 @@
 
 Herramienta local para convertir tus clases en guiones y, más adelante, editar tus videos con tu estilo.
 
-## Instalar en tu Mac (un solo comando)
-Pega esto en la app Terminal. Baja el código, instala el motor de video y crea **Estudio Marketographer** en Aplicaciones:
+## Instalar en tu Mac
+**Opción 1: el instalable (.dmg).** Descarga `Estudio-Marketographer-<versión>.dmg` desde la sección *Releases* de este repositorio, arrastra la app a Aplicaciones y ábrela (la primera vez: clic derecho > Abrir). Se prepara sola: baja unos 1,5 GB una vez y después abre en segundos, sin internet. Avisa cuando hay una versión nueva.
+
+**Opción 2: un comando en Terminal.** Hace lo mismo y crea la app en Aplicaciones:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/themarketographer/marketographer-studio/main/instalar.sh | bash
 ```
-Todo corre en tu Mac, sin internet (salvo la primera instalación). Para **actualizar**, pega el mismo comando: no toca tus videos (viven en `~/EstudioMarketographer/data`).
+No hace falta tener Homebrew, Node ni Python: todo se baja solo y queda dentro de `~/EstudioMarketographer`. Para actualizar, pega el mismo comando (o acepta el aviso al abrir la app). Tus videos viven en `~/EstudioMarketographer/data` y no se tocan.
+
+**Para quien arma el instalable:** `bash empaquetar/construir.sh` crea el .dmg en `dist/`.
 
 ## Clonar y probar (alumnos)
 ```bash

@@ -97,6 +97,17 @@ modules = await api('/modules');
 addEventListener('hashchange', route);
 route();
 
+// Si el Estudio se actualiza mientras la pantalla sigue abierta, se avisa (si no, queda una mezcla de pantalla vieja con motor nuevo).
+(async () => {
+  let base; try { base = (await api('/version')).ui; } catch { return; }
+  setInterval(async () => {
+    let v; try { v = (await api('/version')).ui; } catch { return; }
+    if (v === base || document.getElementById('aviso-version')) return;
+    document.body.append(h('div', { id: 'aviso-version', role: 'status', style: 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:100;background:var(--ink);color:var(--surface-100);padding:10px 14px;border-radius:14px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.4)' },
+      h('span', {}, 'El Estudio se actualizó.'), h('button', { class: 'btn gold sm', onclick: () => location.reload() }, 'Recargar')));
+  }, 15000);
+})();
+
 // Tamaño de la interfaz: 70% a 130%, se recuerda en este navegador.
 (() => {
   const val = document.getElementById('esc-val'); if (!val) return;

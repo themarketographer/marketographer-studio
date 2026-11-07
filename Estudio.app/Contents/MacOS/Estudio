@@ -1,29 +1,63 @@
 #!/bin/bash
-# Abre el Estudio como una app: prende el servidor, abre una ventana propia y lo apaga al cerrarla.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
-
-APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Estudio Marketographer: se prepara solo la primera vez, avisa si hay una versión nueva y abre una ventana propia.
+# Tres formas de estar instalado: (1) app del .dmg con el código dentro, (2) app dentro de la carpeta del código, (3) app copiada que apunta a una carpeta.
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
+RES="$BUNDLE/Contents/Resources"
 GUARDA="$HOME/Library/Application Support/EstudioMarketographer"
 mkdir -p "$GUARDA"
-if [ -f "$APP_DIR/server/index.js" ]; then ROOT="$APP_DIR"
+REPO="themarketographer/marketographer-studio"
+EXCLUIR=(--exclude data --exclude .venv --exclude .runtime --exclude node_modules --exclude models --exclude .git)
+dialogo() { [ -n "$ESTUDIO_AUTO" ] && { echo "button returned:${3:-Entendido}"; return 0; }; osascript -e "display dialog \"$1\" buttons {$2} default button \"${3:-Entendido}\" with title \"Estudio Marketographer\"" 2>/dev/null; }
+mas_nueva() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]; }  # ¿$1 es más nueva que $2?
+
+# ---- dónde vive el código ----
+if [ -d "$RES/codigo" ]; then
+  ROOT="${ESTUDIO_DIR:-$HOME/EstudioMarketographer}"
+  mkdir -p "$ROOT"
+  NUEVA="$(cat "$RES/codigo/VERSION" 2>/dev/null)"; ACTUAL="$(cat "$ROOT/VERSION" 2>/dev/null)"
+  if [ ! -f "$ROOT/server/index.js" ] || mas_nueva "$NUEVA" "$ACTUAL"; then
+    rsync -a "${EXCLUIR[@]}" "$RES/codigo/" "$ROOT/" || { dialogo "No pude copiar el Estudio a tu carpeta personal." '"Cerrar"' Cerrar; exit 1; }
+  fi
+elif [ -f "$BUNDLE/../server/index.js" ]; then ROOT="$(cd "$BUNDLE/.." && pwd)"
 elif [ -f "$GUARDA/ruta" ] && [ -f "$(cat "$GUARDA/ruta")/server/index.js" ]; then ROOT="$(cat "$GUARDA/ruta")"
-else
-  ROOT="$(osascript -e 'POSIX path of (choose folder with prompt "Elige la carpeta marketographer-studio")' 2>/dev/null | sed 's:/$::')"
-  [ -f "$ROOT/server/index.js" ] || exit 1
-fi
+else dialogo "No encuentro la carpeta del Estudio. Vuelve a instalarlo." '"Cerrar"' Cerrar; exit 1; fi
 echo "$ROOT" > "$GUARDA/ruta"
 cd "$ROOT" || exit 1
+RT="$ROOT/.runtime"
 
-if ! command -v node >/dev/null 2>&1; then
-  osascript -e 'display dialog "Falta instalar Node.js. Descárgalo en nodejs.org (versión LTS) y vuelve a abrir el Estudio." buttons {"Entendido"}'
-  open "https://nodejs.org"
-  exit 1
+# ---- ¿falta preparar algo? (Node, Python y librerías, modelos) ----
+HUELLA="$(shasum -a 256 modules/talking-head/engine/requirements.txt 2>/dev/null | cut -c1-16)"
+listo() { { [ -x "$RT/node/bin/node" ] || command -v node >/dev/null 2>&1; } && [ -x "$ROOT/.venv/bin/python" ] && [ "$(cat "$RT/requisitos" 2>/dev/null)" = "$HUELLA" ] && [ -f "$RT/modelos" ]; }
+preparar() {
+  rm -f "$RT/listo" "$RT/error"; mkdir -p "$RT"
+  if [ -n "$ESTUDIO_AUTO" ]; then bash preparar.sh; return; fi  # modo de pruebas: sin ventana de Terminal
+  osascript -e "tell application \"Terminal\" to do script \"cd '$ROOT' && bash preparar.sh; sleep 3; exit\"" -e 'tell application "Terminal" to activate' >/dev/null 2>&1
+  while [ ! -f "$RT/listo" ] && [ ! -f "$RT/error" ]; do sleep 1; done
+  if [ -f "$RT/error" ]; then dialogo "No pude terminar de preparar el Estudio:\n$(cat "$RT/error")\n\nRevisa tu internet y vuelve a abrirlo." '"Cerrar"' Cerrar; exit 1; fi
+  osascript -e 'tell application "Terminal" to close (every window whose name contains "Preparando el Estudio")' >/dev/null 2>&1
+}
+if ! listo; then
+  dialogo "Voy a preparar el Estudio por primera vez. Baja unos 1,5 GB y tarda unos minutos. Necesita internet solo esta vez." '"Ahora no","Preparar"' Preparar | grep -q "Preparar" || exit 0
+  preparar
 fi
 
+# ---- ¿hay una versión nueva en GitHub? (solo si hay internet; no estorba si no) ----
+if [ -z "$ESTUDIO_SIN_ACTUALIZAR" ] && [ ! -d "$BUNDLE/../.git" ]; then
+  REMOTA="$(curl -fsS -m 3 "https://raw.githubusercontent.com/$REPO/main/VERSION" 2>/dev/null | head -1 | tr -d '[:space:]')"
+  LOCAL="$(cat "$ROOT/VERSION" 2>/dev/null)"
+  if [ -n "$REMOTA" ] && mas_nueva "$REMOTA" "$LOCAL" && [ "$(cat "$GUARDA/no-actualizar" 2>/dev/null)" != "$REMOTA" ]; then
+    R="$(dialogo "Hay una versión nueva del Estudio ($REMOTA). Tus videos no se tocan." '"Más tarde","Esta no","Actualizar"' Actualizar)"
+    if echo "$R" | grep -q "Actualizar"; then bash "$ROOT/actualizar.sh" && { listo || preparar; }
+    elif echo "$R" | grep -q "Esta no"; then echo "$REMOTA" > "$GUARDA/no-actualizar"; fi
+  fi
+fi
+
+# ---- servidor y ventana ----
+if [ -x "$RT/node/bin/node" ]; then NODE="$RT/node/bin/node"; else NODE="$(command -v node)"; fi
 PORT=4177
 URL="http://localhost:$PORT"
-# Si el Estudio ya tiene su ventana abierta, un clic en el Dock solo la trae al frente en vez de abrir otra.
+# Si el Estudio ya tiene su ventana abierta, un clic en el Dock solo la trae al frente.
 if pgrep -f "user-data-dir=$GUARDA/ventana" >/dev/null 2>&1; then
   osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || osascript -e 'tell application "Microsoft Edge" to activate' >/dev/null 2>&1
   exit 0
@@ -31,24 +65,23 @@ fi
 mkdir -p data
 PROPIO=0
 if ! curl -s -o /dev/null "$URL"; then
-  node server/index.js >> data/estudio.log 2>&1 &
+  "$NODE" server/index.js >> data/estudio.log 2>&1 &
   SERVER_PID=$!
   PROPIO=1
-  for i in $(seq 1 40); do curl -s -o /dev/null "$URL" && break; sleep 0.25; done
+  for i in $(seq 1 60); do curl -s -o /dev/null "$URL" && break; sleep 0.2; done
 fi
-
 apagar() { [ "$PROPIO" = 1 ] && kill "$SERVER_PID" 2>/dev/null; }
 trap apagar EXIT
 
+if [ -n "$ESTUDIO_AUTO" ]; then echo "Servidor listo en $URL"; curl -s "$URL/api/talking-head/filtros" | head -c 60; echo; exit 0; fi  # modo de pruebas: sin ventana
 NAV=""
 for c in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" "/Applications/Chromium.app/Contents/MacOS/Chromium"; do
   [ -x "$c" ] && NAV="$c" && break
 done
-
 if [ -n "$NAV" ]; then
   # Ventana propia, sin barra de direcciones ni pestañas. Al cerrarla, termina este comando y se apaga el servidor.
   "$NAV" --app="$URL" --user-data-dir="$GUARDA/ventana" --window-size=1440,920 --no-first-run --no-default-browser-check >/dev/null 2>&1
 else
   open "$URL"
-  osascript -e 'display dialog "No encontré Chrome, Edge ni Brave, así que abrí el Estudio en Safari. Para apagarlo, vuelve a este aviso y pulsa Apagar." buttons {"Apagar"} default button "Apagar"' >/dev/null 2>&1
+  dialogo "No encontré Chrome, Edge ni Brave, así que abrí el Estudio en Safari. Cuando termines, pulsa Apagar." '"Apagar"' Apagar >/dev/null
 fi

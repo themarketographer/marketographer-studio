@@ -100,6 +100,14 @@ router.post('/api/respaldos/:id/restaurar', ({ params }) => {
 modules.sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
 router.get('/api/modules', () => modules);
 router.get('/api/config', () => ({ zoomDir: config.zoomDir }));
+// Huella de la interfaz (la última modificación de sus archivos): la pantalla abierta la compara para avisar "se actualizó, recarga".
+const huellaUi = () => {
+  let mx = 0;
+  const ver = (d) => { try { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) { if (f.name !== 'engine' && f.name !== 'assets' && f.name !== 'fonts') ver(p); } else if (/\.(js|css|html)$/.test(f.name)) mx = Math.max(mx, fs.statSync(p).mtimeMs); } } catch { /* carpeta ausente */ } };
+  ver(path.join(ROOT, 'web')); ver(path.join(ROOT, 'modules'));
+  return String(Math.round(mx));
+};
+router.get('/api/version', () => ({ ui: huellaUi() }));
 
 // ---------- HTTP ----------
 function send(res, status, body, type = 'application/json; charset=utf-8') {

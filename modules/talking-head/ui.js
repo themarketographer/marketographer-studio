@@ -212,7 +212,9 @@ const formatoAuto = (w, h) => (w / h > 1.2 ? '16x9' : w / h > 0.9 ? '1x1' : '9x1
 const etqSalida = (plan) => FMT_NOM[(plan && plan.formato) || '9x16'].join('x');
 const dimsVideo = (url) => new Promise((ok) => { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => ok({ w: v.videoWidth, h: v.videoHeight }); v.onerror = () => ok(null); v.src = url; });
 
+let vigilaAncho = null, wsResize = null;
 export async function mount(root, { api: api0, toast, h, icon }) {
+  if (vigilaAncho) removeEventListener('resize', vigilaAncho);
   // Barra de trabajo: cualquier cambio que se mande al motor y tarde más de un instante muestra una barra arriba con lo que está pasando.
   const ETIQ = [[/vocabulario/, 'Corrigiendo palabras con tu vocabulario'], [/replanear/, 'Recalculando con tus ajustes'], [/candidatos|portada/, 'Buscando los mejores momentos'], [/duplicar/, 'Duplicando el proyecto'], [/miniatura/, 'Preparando la miniatura'], [/renderizar|vista/, 'Preparando el video'], [/sfx|musica/, 'Guardando el audio']];
   let enVuelo = 0, barraT = 0, barraEl = null;
@@ -691,8 +693,14 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     arrastrar(dv, 'v'); arrastrar(dh, 'h'); teclas(dv, 'v'); teclas(dh, 'h');
     ed.append(dv, dh);
     ed._diseno = (clave) => { const [, v, hh] = DISENOS[clave]; D.v = v; D.h = hh; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); };
-    window.addEventListener('resize', () => { if (ed.isConnected) { aplicar(); if (timeline) timeline.pintar(); } });
+    if (wsResize) removeEventListener('resize', wsResize);
+    wsResize = () => { if (ed.isConnected) { aplicar(); if (timeline) timeline.pintar(); } };
+    addEventListener('resize', wsResize);
   }
+  // Si la ventana cruza los 900 px (se achica o se agranda), el diseño cambia entre "acoplado" y "hoja inferior": se vuelve a pintar.
+  let tAncho = 0;
+  vigilaAncho = () => { clearTimeout(tAncho); tAncho = setTimeout(() => { if (S.p && S.p.analizado && !S.p.corriendo && root.isConnected && (window.innerWidth >= 900) !== S.anchoAncho) pintar(); }, 150); };
+  addEventListener('resize', vigilaAncho);
   function pintar() {
     const p = S.p;
     const menuMas = h('div', { class: 'menu-pop', hidden: true, role: 'menu' },
@@ -721,6 +729,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         h('button', { class: 'btn gold', onclick: () => lanzar('analizar', {}), html: icon('play') + ' Analizar video' })));
     }
     root.style.setProperty('--asp', FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']);
+    S.anchoAncho = window.innerWidth >= 900;  // con qué diseño se pintó: si la ventana cruza los 900 px se vuelve a pintar
     const ed = h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
     root.replaceChildren(cab, titulo, ed);
     if (ed.classList.contains('ws')) espacioDeTrabajo(ed);
