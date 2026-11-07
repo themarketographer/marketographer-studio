@@ -567,6 +567,15 @@ def _dibujar_frase(dst, ev, obj, t, W, H, colors):
 OSCURO = (24, 24, 24)
 
 
+def _lum(rgb):
+    return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+
+
+def _sobre(rgb):
+    """Color de texto legible sobre un fondo de este color: oscuro si el fondo es claro, blanco si es oscuro."""
+    return OSCURO if _lum(rgb) > 140 else (255, 255, 255)
+
+
 def _factor(ev):
     return {"S": 0.045, "M": 0.06, "L": 0.075, "XL": 0.09}.get(ev.get("size", "M"), 0.06)
 
@@ -586,16 +595,17 @@ def _ancho(texto, pxf, style, W, H):
 
 def _preparar_nuevo(ev, style, W, H, colors):
     k, its, f = ev["kind"], _lineas(ev), _factor(ev)
-    oscuro = {**colors, "text": OSCURO}
+    oscuro = {**colors, "text": _sobre(colors["accent"])}
+    acento = "accent" if _lum(colors["accent"]) >= 90 else "text"  # un acento muy oscuro no se lee sobre fondo oscuro
     t0, t1 = (its[0] if its else ""), (its[1] if len(its) > 1 else "")
     sp = lambda txt, pxf, col, cs=colors: _sprite(txt, pxf, col, style, W, H, cs) if txt else None
     if k == "rotulo":
-        return {"n": sp(t0, f * 0.75, "text"), "c": sp(t1, f * 0.5, "accent"), "wn": _ancho(t0, f * 0.75, style, W, H) if t0 else 0, "wc": _ancho(t1, f * 0.5, style, W, H) if t1 else 0}
+        return {"n": sp(t0, f * 0.75, "text"), "c": sp(t1, f * 0.5, acento), "wn": _ancho(t0, f * 0.75, style, W, H) if t0 else 0, "wc": _ancho(t1, f * 0.5, style, W, H) if t1 else 0}
     if k == "llamada":
         return {"t": sp(t0, f * 0.7, "text", oscuro), "w": _ancho(t0, f * 0.7, style, W, H) if t0 else 0}
     if k == "etiqueta":
         return {"t": sp(t0, f * 0.8, "text", oscuro), "w": _ancho(t0, f * 0.8, style, W, H) if t0 else 0}
-    return {"t": sp(t0, f * 1.1, "text"), "n": sp(t1, 0.12, "accent")}
+    return {"t": sp(t0, f * 1.1, "text"), "n": sp(t1, 0.12, acento)}
 
 
 def _caja(dst, x0, y0, x1, y1, r, bgr, alpha):

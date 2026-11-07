@@ -214,7 +214,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   }
 
   // ---------- que nada se solape ----------
-  const KIND_Y0 = { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36 };
+  const KIND_Y0 = { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36, rotulo: 0.78, etiqueta: 0.2 };
   let ajustes = new Map();
   function altoEv(e, st) {
     const k = e.kind, n = Math.max((e.items || []).length, 1);
@@ -227,6 +227,8 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (k === 'lista') return [Math.min(n, 6) * f * 1.12 * 1.2, 0];
     if (k === 'conexion') return [0.13 * (Math.min(n, 4) - 1) + 0.09, 0.065 * (Math.min(n, 4) - 1)];
     if (k === 'numero') return [0.22, 0.06];
+    if (k === 'rotulo') return [0.044 + f * 0.75 * 1.12 + (n > 1 ? 0.004 + f * 0.5 * 1.12 : 0), 0];
+    if (k === 'etiqueta') return [f * 0.8 * 1.12 + 0.028, 0];
     return [0.1 * Math.min(n, 4), 0.05 * (Math.min(n, 4) - 1)];
   }
   function evitarSolapes(P, events, t) {
@@ -236,14 +238,18 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!act.length) return;
     let sub = null;
     if (s.on) sub = [s.y, (SUB_SIZE[s.size] || 0.038) * 1.12 * (s.maxPal >= 3 ? 2 : 1) + 0.03];
-    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && !NUEVOS.includes(e.kind) && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
+    const its = events.filter((e) => e.kind !== 'punto' && e.kind !== 'escena' && e.kind !== 'frase' && e.kind !== 'sticker' && e.kind !== 'llamada' && e.kind !== 'seccion' && !(!e.kind && DETRAS.includes(e.pos)) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => {
       const [h, off] = altoEv(e, st), manual = e.y != null;
       const base = manual ? e.y : (e.kind ? (KIND_Y0[e.kind] ?? 0.4) : (POS_Y[e.pos] ?? 0.3));
       return { e, h, off, c: base + off, manual };
     }).sort((a, b) => (a.manual === b.manual ? a.e.start - b.e.start : a.manual ? -1 : 1));
+    // los títulos de detrás no se mueven, pero rótulos y etiquetas se apartan de ellos
+    const fijos = events.filter((e) => !e.kind && DETRAS.includes(e.pos) && act.some((a) => e.start < a.end && a.start < e.end)).map((e) => ({ e, c: (e.y != null ? e.y : (POS_Y[e.pos] ?? 0.3)) + altoEv(e, st)[1], h: altoEv(e, st)[0] }));
+    for (const e of act) if (e.kind === 'llamada') fijos.push({ e, c: (e.y ?? 0.45) - 0.12, h: ({ S: 0.045, M: 0.06, L: 0.075, XL: 0.09 }[e.size] || 0.06) * 0.7 * 1.12 + 0.032 });  // la píldora de una llamada tampoco se mueve
     const placed = [];
     for (const it of its) {
-      const obst = (sub ? [sub] : []).concat(placed.filter((p) => p.e.start < it.e.end && it.e.start < p.e.end).map((p) => [p.c, p.h]));
+      const obst = (sub ? [sub] : []).concat(placed.filter((p) => p.e.start < it.e.end && it.e.start < p.e.end).map((p) => [p.c, p.h]),
+        it.e.kind === 'rotulo' || it.e.kind === 'etiqueta' ? fijos.filter((p) => p.e.start < it.e.end && it.e.start < p.e.end).map((p) => [p.c, p.h]) : []);
       if (!it.manual && obst.length) {
         const choca = (x) => obst.some(([bc, bh]) => Math.abs(x - bc) < it.h / 2 + bh / 2 + 0.008);
         if (choca(it.c)) {
@@ -465,12 +471,15 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     const k = ev.kind, d = t - ev.start, col = colores(st), alpha = clamp(d / 0.2) * clamp((ev.end - t) / 0.25);
     const its = (ev.items || []).map(String).filter((x) => x.trim()), t0 = its[0] || '', t1 = its[1] || '';
     if (alpha <= 0.01 || !t0) return;
-    const f = { S: 0.045, M: 0.06, L: 0.075, XL: 0.09 }[ev.size] || 0.06, caso = st.titulosCaso || 'mayus', tr = st.tracking, y0 = ev.y != null ? ev.y : null;
+    const f = { S: 0.045, M: 0.06, L: 0.075, XL: 0.09 }[ev.size] || 0.06, caso = st.titulosCaso || 'mayus', tr = st.tracking, y0 = ev.y != null ? ev.y : (ajustes.has(ev) ? ajustes.get(ev) : null);
     const pxDe = (txt, pxf) => { const it = sprItems(txt, '#000', st, ev), w200 = medida(it, 200, tr * 200); return Math.max(Math.min(pxf * H, 200 * 0.9 * W / Math.max(w200, 1)), 16); };
     const ancho = (txt, pxf) => { if (!txt) return 0; const px = pxDe(txt, pxf); return medida(sprItems(txt, '#000', st, ev), px, tr * px); };
     const txt = (s, pxf, color, cx, cy, alp, sc = 1) => { if (!s) return; const px = pxDe(s, pxf); c.save(); c.globalAlpha = alp; c.translate(cx, cy); c.scale(sc, sc); dibujarTexto(c, [sprItems(s, color, st, ev)], 0, 0, px, st); c.restore(); };
     const caja = (x0, y0_, x1, y1, r, color, alp) => { c.save(); c.globalAlpha = alp; c.fillStyle = color; c.beginPath(); c.roundRect(x0, y0_, x1 - x0, y1 - y0_, r); c.fill(); c.restore(); };
-    const OSC = '#181818';
+    // texto legible sobre el color de acento: oscuro si el acento es claro, blanco si es oscuro; un acento muy oscuro no se usa como texto
+    const rgb = (hex) => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(col.accent); return m ? [1, 2, 3].map((i) => parseInt(m[i], 16)) : [253, 220, 91]; };
+    const lum = (() => { const [r, g, b] = rgb(); return 0.299 * r + 0.587 * g + 0.114 * b; })();
+    const OSC = lum > 140 ? '#181818' : '#ffffff', ACE = lum >= 90 ? col.accent : col.text;
     if (k === 'rotulo') {
       const pn = f * 0.75 * H, p = 0.022 * H, bar = Math.max(6, 0.007 * H), nh = pn * 1.12, ch = t1 ? f * 0.5 * H * 1.12 : 0, gap = t1 ? 0.004 * H : 0;
       const wn = ancho(t0, f * 0.75), wc = ancho(t1, f * 0.5), bh = 2 * p + nh + gap + ch, bw = bar + 2 * p + Math.max(wn, wc);
@@ -479,7 +488,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       caja(left + dx, top, left + dx + bar, top + bh, 0, col.accent, alpha);
       const tx = left + dx + bar + p;
       txt(t0, f * 0.75, col.text, tx + wn / 2, top + p + nh / 2, alpha);
-      if (t1) txt(t1, f * 0.5, col.accent, tx + wc / 2, top + p + nh + gap + ch / 2, alpha);
+      if (t1) txt(t1, f * 0.5, ACE, tx + wc / 2, top + p + nh + gap + ch / 2, alpha);
     } else if (k === 'llamada') {
       const px = f * 0.7 * H, p = 0.016 * H, pw = ancho(t0, f * 0.7) + 3 * p, ph = px * 1.12 + 2 * p;
       const X = (ev.x ?? 0.7) * W, Y = (y0 ?? 0.45) * H;
@@ -498,7 +507,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     } else if (k === 'seccion') {
       c.save(); c.globalAlpha = alpha * 0.4; c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.restore();
       const yy = y0 ?? 0.45, rise = (1 - easeOut(clamp(d / 0.4))) * 0.03 * H, ta = alpha * clamp(d / 0.25);
-      if (t1) { txt(t1, 0.12, col.accent, W / 2, H * (yy - 0.03) + rise, ta); txt(t0, f * 1.1, col.text, W / 2, H * (yy + 0.07) + rise, ta); }
+      if (t1) { txt(t1, 0.12, ACE, W / 2, H * (yy - 0.03) + rise, ta); txt(t0, f * 1.1, col.text, W / 2, H * (yy + 0.07) + rise, ta); }
       else txt(t0, f * 1.1, col.text, W / 2, H * yy + rise, ta);
     }
   }
@@ -896,7 +905,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       if (pel.sobreMi === false && conMatte) ctx.drawImage(subjC, 0, 0);
     }
     viñeta(ctx, st);
-    front.filter((e) => e.kind !== 'punto').forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
+    front.filter((e) => e.kind !== 'punto').sort((x, y) => (y.kind === 'seccion') - (x.kind === 'seccion')).forEach((e) => conOp(ctx, e, () => (e.kind ? dibujarKind(ctx, e, t, st) : dibujarTitulo(ctx, e, t, st))));
     dibujarSubs(ctx, t, st, events, 0);
     front.filter((e) => e.kind === 'punto').forEach((e) => dibujarKind(ctx, e, t, st));
     ctx.restore();

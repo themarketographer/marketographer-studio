@@ -832,7 +832,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
             out = cv2.add(cv2.multiply(f, a3, scale=1 / 255.0), cv2.multiply(layer, cv2.bitwise_not(a3), scale=1 / 255.0))
         out = peli.global_(out, a)
         out = apply_vig(out)
-        for e in front:
+        for e in sorted(front, key=lambda x: x.get("kind") != "seccion"):  # el velo de una sección va debajo de lo demás
             if e.get("kind") == "punto":
                 continue
             if e.get("kind") in graf.TIPOS:
@@ -905,7 +905,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     return cerrar(extra)
 
 
-KIND_Y = {"lista": 0.40, "conexion": 0.30, "numero": 0.42, "barras": 0.36}
+KIND_Y = {"lista": 0.40, "conexion": 0.30, "numero": 0.42, "barras": 0.36, "rotulo": 0.78, "etiqueta": 0.20}
 
 
 def _alto_y(e, spr, H):
@@ -925,6 +925,10 @@ def _alto_y(e, spr, H):
         return 0.13 * (min(n, 4) - 1) + 0.09, 0.065 * (min(n, 4) - 1)
     if k == "numero":
         return 0.22, 0.06
+    if k == "rotulo":  # mismas medidas que graficos._dibujar_nuevo
+        return 0.044 + f * 0.75 * 1.12 + (0.004 + f * 0.5 * 1.12 if n > 1 else 0), 0.0
+    if k == "etiqueta":
+        return f * 0.8 * 1.12 + 0.028, 0.0
     return 0.1 * min(n, 4), 0.05 * (min(n, 4) - 1)
 
 
@@ -936,18 +940,28 @@ def evitar_solapes(events, sprites, style, H):
     if s.get("on"):
         half = SUB_SIZE.get(s["size"], 0.038) * 1.12 * (2 if int(s.get("maxPal", 3)) >= 3 else 1) / 2 + 0.015
         sub = (float(s["y"]), half * 2)
-    items = []
+    items, fijos = [], []
     for e in events:
-        if e.get("kind") in ("punto", "escena", "frase", "sticker", "rotulo", "llamada", "etiqueta", "seccion") or (not e.get("kind") and e.get("pos") in DETRAS):
+        if e.get("kind") == "llamada":  # la píldora de una llamada tampoco se mueve: lo demás se aparta
+            fl = {"S": 0.045, "M": 0.06, "L": 0.075, "XL": 0.09}.get(e.get("size", "M"), 0.06)
+            fijos.append({"e": e, "h": fl * 0.7 * 1.12 + 0.032, "c": (float(e["y"]) if e.get("y") is not None else 0.45) - 0.12})
+            continue
+        if e.get("kind") in ("punto", "escena", "frase", "sticker", "seccion"):
             continue
         alto, off = _alto_y(e, sprites[e["id"]], H)
         manual = e.get("y") is not None
         base = float(e["y"]) if manual else (KIND_Y.get(e.get("kind"), POS_Y.get(e.get("pos"), 0.30)) if e.get("kind") else POS_Y.get(e.get("pos"), 0.30))
-        items.append({"e": e, "h": alto, "off": off, "c": base + off, "manual": manual})
+        it = {"e": e, "h": alto, "off": off, "c": base + off, "manual": manual}
+        if not e.get("kind") and e.get("pos") in DETRAS:
+            fijos.append(it)  # los títulos de detrás no se mueven, pero rótulos y etiquetas se apartan de ellos
+        else:
+            items.append(it)
     placed = []
     for it in sorted(items, key=lambda i: (not i["manual"], i["e"]["start"])):
         e = it["e"]
         obst = ([sub] if sub else []) + [(p["c"], p["h"]) for p in placed if p["e"]["start"] < e["end"] and e["start"] < p["e"]["end"]]
+        if e.get("kind") in ("rotulo", "etiqueta"):
+            obst += [(p["c"], p["h"]) for p in fijos if p["e"]["start"] < e["end"] and e["start"] < p["e"]["end"]]
         if not it["manual"] and obst:
             c, h = it["c"], it["h"]
             choca = lambda x: any(abs(x - bc) < h / 2 + bh / 2 + 0.008 for bc, bh in obst)
