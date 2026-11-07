@@ -63,19 +63,23 @@ for (int c = 0; c < 3; c++) fa[(y * W + x) * 3 + c] = (uchar)clamp(rint(o[c]), 0
 aa[y * W + x] = (uchar)clamp(rint(av), 0.0f, 255.0f);
 """
 
-# promedio de bloques K x K (igual que cv2.resize INTER_AREA cuando la medida es divisible)
+# promedio por área (igual que cv2.resize INTER_AREA) a una cuadrícula GW x GH, para cualquier medida
 _SRC_D = """
 int x = (int)thread_position_in_grid.x, y = (int)thread_position_in_grid.y;
-int w = W / K, h = H / K;
-if (x >= w || y >= h) return;
-float sum[3] = {0.0f, 0.0f, 0.0f}; float sa = 0.0f;
-for (int j = 0; j < K; j++) for (int i = 0; i < K; i++) {
-  int p = (y * K + j) * W + (x * K + i);
-  sum[0] += f[p * 3]; sum[1] += f[p * 3 + 1]; sum[2] += f[p * 3 + 2]; sa += al[p];
+if (x >= GW || y >= GH) return;
+float rx = (float)W / (float)GW, ry = (float)H / (float)GH;
+float ax = (float)x * rx, bx = ax + rx, ay = (float)y * ry, by = ay + ry;
+float sum[3] = {0.0f, 0.0f, 0.0f}; float sa = 0.0f, wt = 0.0f;
+for (int j = (int)ay; j < (int)ceil(by) && j < H; j++) {
+  float wy = metal::min((float)(j + 1), by) - metal::max((float)j, ay);
+  for (int i = (int)ax; i < (int)ceil(bx) && i < W; i++) {
+    float wg = (metal::min((float)(i + 1), bx) - metal::max((float)i, ax)) * wy;
+    int p = j * W + i;
+    sum[0] += wg * f[p * 3]; sum[1] += wg * f[p * 3 + 1]; sum[2] += wg * f[p * 3 + 2]; sa += wg * al[p]; wt += wg;
+  }
 }
-float n = (float)(K * K);
-for (int c = 0; c < 3; c++) sf[(y * w + x) * 3 + c] = sum[c] / n;
-sm[y * w + x] = sa / n;
+for (int c = 0; c < 3; c++) sf[(y * GW + x) * 3 + c] = sum[c] / wt;
+sm[y * GW + x] = sa / wt;
 """
 
 # silueta a media resolución: promedio 2x2 y desenfoque horizontal gaussiano (sigma 1,5, radio 5): sigma 3 a tamaño completo
@@ -87,8 +91,8 @@ const float wt[11] = {0.001028f, 0.007599f, 0.036001f, 0.109361f, 0.213006f, 0.2
 float acc = 0.0f;
 for (int i = -5; i <= 5; i++) {
   int xx = metal::min(metal::max(x + i, 0), hw - 1);
-  int p = (2 * y) * W + 2 * xx;
-  acc += wt[i + 5] * 0.25f * ((float)al[p] + (float)al[p + 1] + (float)al[p + W] + (float)al[p + W + 1]);
+  int xa = metal::min(2 * xx, W - 1), xb = metal::min(2 * xx + 1, W - 1), ya = metal::min(2 * y, H - 1), yb = metal::min(2 * y + 1, H - 1);
+  acc += wt[i + 5] * 0.25f * ((float)al[ya * W + xa] + (float)al[ya * W + xb] + (float)al[yb * W + xa] + (float)al[yb * W + xb]);
 }
 tmp[y * hw + x] = acc;
 """
@@ -99,15 +103,15 @@ int x = (int)thread_position_in_grid.x, y = (int)thread_position_in_grid.y;
 if (x >= W || y >= H) return;
 const float wt[11] = {0.001028f, 0.007599f, 0.036001f, 0.109361f, 0.213006f, 0.266012f, 0.213006f, 0.109361f, 0.036001f, 0.007599f, 0.001028f};
 int hw = W / 2, hh = H / 2;
-int hx = metal::min(x / 2, hw - 1), hy = y / 2;
+int hx = metal::min((int)((float)x * (float)hw / (float)W), hw - 1), hy = metal::min((int)((float)y * (float)hh / (float)H), hh - 1);
 float acc = 0.0f;
 for (int j = -5; j <= 5; j++) {
   int yy = metal::min(metal::max(hy + j, 0), hh - 1);
   acc += wt[j + 5] * tmp[yy * hw + hx];
 }
 float libre = 255.0f - acc;
-int gw = W / K, gh = H / K;
-float gx = clamp(((float)x + 0.5f) / (float)K - 0.5f, 0.0f, (float)(gw - 1)), gy = clamp(((float)y + 0.5f) / (float)K - 0.5f, 0.0f, (float)(gh - 1));
+int gw = GW, gh = GH;
+float gx = clamp(((float)x + 0.5f) * (float)gw / (float)W - 0.5f, 0.0f, (float)(gw - 1)), gy = clamp(((float)y + 0.5f) * (float)gh / (float)H - 0.5f, 0.0f, (float)(gh - 1));
 int x0 = (int)gx, y0 = (int)gy, x1 = metal::min(x0 + 1, gw - 1), y1 = metal::min(y0 + 1, gh - 1);
 float fx = gx - (float)x0, fy = gy - (float)y0;
 for (int c = 0; c < 3; c++) {
@@ -118,12 +122,44 @@ for (int c = 0; c < 3; c++) {
 }
 """
 
+# estela horizontal de movimiento (solo en el fondo o en todo) y zoom en blanco y negro
+_SRC_M = """
+int x = (int)thread_position_in_grid.x, y = (int)thread_position_in_grid.y;
+if (x >= W || y >= H) return;
+int p = y * W + x;
+int k = (int)prm[0];
+float o[3];
+for (int c = 0; c < 3; c++) o[c] = fb[p * 3 + c];
+if (k > 0) {
+  float xx = metal::abs(((float)x / (float)(W - 1)) * 2.0f - 1.0f);
+  float em = clamp((xx - 0.12f) / 0.6f, 0.0f, 1.0f);
+  float m = prm[2] > 0.5f ? 0.85f + 0.15f * em : em;
+  float wm = clamp(m * prm[1], 0.0f, 1.0f);
+  if (prm[3] > 0.5f) wm *= 1.0f - (float)aa[p] / 255.0f;
+  float est[3] = {0.0f, 0.0f, 0.0f};
+  int r = k / 2;
+  for (int i = -r; i <= r; i++) {
+    int xi = x + i;
+    if (xi < 0) xi = -xi;
+    if (xi > W - 1) xi = 2 * (W - 1) - xi;
+    xi = metal::min(metal::max(xi, 0), W - 1);
+    for (int c = 0; c < 3; c++) est[c] += fb[(y * W + xi) * 3 + c];
+  }
+  for (int c = 0; c < 3; c++) o[c] = floor(o[c] * (1.0f - wm) + (est[c] / (float)k) * wm);
+}
+if (prm[4] > 0.0f) {
+  float gray = rint(0.114f * o[0] + 0.587f * o[1] + 0.299f * o[2]);
+  for (int c = 0; c < 3; c++) o[c] = o[c] * (1.0f - prm[4]) + gray * prm[4];
+}
+for (int c = 0; c < 3; c++) out[p * 3 + c] = (uchar)clamp(rint(o[c]), 0.0f, 255.0f);
+"""
+
 # fondo desenfocado: mezcla del cuadro con su versión borrosa (constante o con mapa de bordes)
 _SRC_L = """
 int x = (int)thread_position_in_grid.x, y = (int)thread_position_in_grid.y;
 if (x >= W || y >= H) return;
-int bw = W / K, bh = H / K;
-float gx = clamp(((float)x + 0.5f) / (float)K - 0.5f, 0.0f, (float)(bw - 1)), gy = clamp(((float)y + 0.5f) / (float)K - 0.5f, 0.0f, (float)(bh - 1));
+int bw = GW, bh = GH;
+float gx = clamp(((float)x + 0.5f) * (float)bw / (float)W - 0.5f, 0.0f, (float)(bw - 1)), gy = clamp(((float)y + 0.5f) * (float)bh / (float)H - 0.5f, 0.0f, (float)(bh - 1));
 int x0 = (int)gx, y0 = (int)gy, x1 = metal::min(x0 + 1, bw - 1), y1 = metal::min(y0 + 1, bh - 1);
 float fx = gx - (float)x0, fy = gy - (float)y0;
 float w = prm[1] * (prm[0] > 1.5f ? edge[y * W + x] : 1.0f);
@@ -151,8 +187,8 @@ if (prm[1] > 0.5f) {  // look de película: tabla de color, "sobre mí" y grano
     float gr = (float)lut[(int)clamp(o[c], 0.0f, 255.0f) * 3 + c];
     if (prm[2] < 0.5f) gr = rint(o[c] * al + gr * (1.0f - al));
     if (prm[3] >= 0.0f) {
-      int hw = W / 2, hh = H / 2;
-      float gx = clamp(((float)x + 0.5f) * 0.5f - 0.5f, 0.0f, (float)(hw - 1)), gy = clamp(((float)y + 0.5f) * 0.5f - 0.5f, 0.0f, (float)(hh - 1));
+      int hw = TW, hh = TH;
+      float gx = clamp(((float)x + 0.5f) * (float)hw / (float)W - 0.5f, 0.0f, (float)(hw - 1)), gy = clamp(((float)y + 0.5f) * (float)hh / (float)H - 0.5f, 0.0f, (float)(hh - 1));
       int x0 = (int)gx, y0 = (int)gy, x1 = metal::min(x0 + 1, hw - 1), y1 = metal::min(y0 + 1, hh - 1);
       float fx = gx - (float)x0, fy = gy - (float)y0;
       int base = (int)prm[3] * hw * hh * 3;
@@ -206,14 +242,16 @@ class Gpu:
             self.n_pool = len(peli.pool)
             self.pos = mx.array(np.stack([p[0] for p in peli.pool]))
             self.neg = mx.array(np.stack([p[1] for p in peli.pool]))
-        self.ok = (W % 8 == 0 and H % 8 == 0 and W % 6 == 0 and H % 6 == 0 and W % 2 == 0 and H % 2 == 0)
+        self.tw, self.th = (self.pos.shape[2], self.pos.shape[1]) if self.n_pool else (1, 1)
+        self.ok = W >= 64 and H >= 64
 
     def _eval(self, *arrs):
         mx.eval(*arrs)
 
-    def frame(self, f, a, s, cx, cy, ops, w_, osc, back_cb):
+    def frame(self, f, a, s, cx, cy, ops, w_, osc, back_cb, mbp=None, bn=0.0):
         """Un cuadro. f: BGR uint8, a: máscara uint8, s: zoom (1 = sin zoom), ops: filtros activos [(tipo, valor, matriz)],
         w_/osc: desenfoque de fondo (w_=0: ninguno), back_cb(layer_uint8) -> layer (dibuja los textos de detrás de ti) o None.
+        mbp: estela de movimiento (k, peso, siempre, solo_fondo) o None; bn: peso del blanco y negro del zoom (0 = nada).
         Devuelve el cuadro BGR uint8, o None si hay que usar la CPU."""
         W, H, peli = self.W, self.H, self.peli
         if not self.ok or len(ops) > MAX_OPS:
@@ -232,18 +270,24 @@ class Gpu:
                          [(H, W, 3), (H, W)], [mx.uint8, mx.uint8], W=W, H=H)
         fb = fa
         if peli.on and (peli.bloom >= 0.02 or peli.hal >= 0.02):
-            sf, sm = _lanzar("estudio_d", ["f", "al"], ["sf", "sm"], _SRC_D, [fa, aa], (W // 8, H // 8),
-                             [(H // 8, W // 8, 3), (H // 8, W // 8)], [mx.float32, mx.float32], W=W, H=H, K=8)
+            gw8, gh8 = max(W // 8, 8), max(H // 8, 8)  # la misma cuadrícula que usa el camino de CPU
+            sf, sm = _lanzar("estudio_d", ["f", "al"], ["sf", "sm"], _SRC_D, [fa, aa], (gw8, gh8),
+                             [(gh8, gw8, 3), (gh8, gw8)], [mx.float32, mx.float32], W=W, H=H, GW=gw8, GH=gh8)
             tmp = _lanzar("estudio_h", ["al"], ["tmp"], _SRC_H, [aa], (W // 2, H // 2), [(H // 2, W // 2)], [mx.float32], W=W, H=H)[0]
             self._eval(sf, sm)
             small = np.rint(np.array(sf)).astype(np.uint8)
             am = np.rint(np.array(sm)).astype(np.uint8)
             glow = peli.glow_pequeno(small, am).astype(np.float32)
-            fb = _lanzar("estudio_b", ["fa", "tmp", "glow"], ["fb"], _SRC_B, [fa, tmp, mx.array(glow)], (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H, K=8)[0]
+            fb = _lanzar("estudio_b", ["fa", "tmp", "glow"], ["fb"], _SRC_B, [fa, tmp, mx.array(glow)], (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H, GW=gw8, GH=gh8)[0]
+        if mbp is not None or bn > 0.0:
+            k, wbase, siempre, sobre = mbp if mbp is not None else (0, 0.0, False, False)
+            fb = _lanzar("estudio_m", ["fb", "aa", "prm"], ["out"], _SRC_M, [fb, aa, mx.array(np.array([k, wbase, 1.0 if siempre else 0.0, 1.0 if sobre else 0.0, bn], np.float32))],
+                         (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H)[0]
         layer, usa_layer = fb, 0.0
         if w_ > 0.01:
-            sf6 = _lanzar("estudio_d", ["f", "al"], ["sf", "sm"], _SRC_D, [fb, aa], (W // 6, H // 6),
-                          [(H // 6, W // 6, 3), (H // 6, W // 6)], [mx.float32, mx.float32], W=W, H=H, K=6)[0]
+            gw6, gh6 = max(W // 6, 8), max(H // 6, 8)
+            sf6 = _lanzar("estudio_d", ["f", "al"], ["sf", "sm"], _SRC_D, [fb, aa], (gw6, gh6),
+                          [(gh6, gw6, 3), (gh6, gw6)], [mx.float32, mx.float32], W=W, H=H, GW=gw6, GH=gh6)[0]
             self._eval(sf6)
             small = np.rint(np.array(sf6)).astype(np.uint8)
             small = cv2.GaussianBlur(small, (0, 0), 4.2).astype(np.float32)
@@ -252,7 +296,7 @@ class Gpu:
                 self.edge = mx.array(np.ascontiguousarray(self.edge_fn().astype(np.float32)))
             layer = _lanzar("estudio_l", ["fb", "bl", "edge", "prm"], ["layer"], _SRC_L,
                             [fb, mx.array(small), self.edge if modo == 2.0 else mx.zeros((1,), mx.float32), mx.array(np.array([modo, w_, osc], np.float32))],
-                            (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H, K=6)[0]
+                            (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H, GW=gw6, GH=gh6)[0]
             usa_layer = 1.0
         if back_cb is not None:
             self._eval(layer)
@@ -266,6 +310,6 @@ class Gpu:
             peli.n += 1
         pc = np.array([usa_layer, 1.0 if peli.on else 0.0, 1.0 if peli.sobre_mi else 0.0, grano, 1.0 if self.has_vm else 0.0], np.float32)
         out = _lanzar("estudio_c", ["fb", "layer", "aa", "lut", "pos", "neg", "vig", "prm"], ["out"], _SRC_C,
-                      [fb, layer, aa, self.lut, self.pos, self.neg, self.vm, mx.array(pc)], (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H)[0]
+                      [fb, layer, aa, self.lut, self.pos, self.neg, self.vm, mx.array(pc)], (W, H), [(H, W, 3)], [mx.uint8], W=W, H=H, TW=self.tw, TH=self.th)[0]
         self._eval(out)
         return np.array(out)

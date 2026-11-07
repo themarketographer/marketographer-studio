@@ -812,11 +812,19 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
         else:
             w_, osc = 0.0, 0.5
         ops = filtros.ops_gpu(plan, t) if G is not None else None
-        usa_cpu = G is None or ops is None or (style["zoomBN"] and s > 1.03)
-        if not usa_cpu and mb > 0.02:  # la estela de movimiento no está en la GPU: esos cuadros van por CPU
-            vel_ = abs(s - s_prev) * fps
-            base_ = (0.55 + 0.25 * math.sin(t * 1.9)) if style.get("motionBlurModo", "zoom") == "siempre" else 0.0
-            usa_cpu = max(min(vel_ * 3, 1.0) if vel_ > 0.05 else 0.0, base_) > 0.02
+        usa_cpu = G is None or ops is None
+        mbp, bn_w = None, 0.0
+        if not usa_cpu:
+            if mb > 0.02:  # estela horizontal de movimiento: mismas cuentas que el camino de CPU
+                vel_ = abs(s - s_prev) * fps
+                siempre_ = style.get("motionBlurModo", "zoom") == "siempre"
+                base_ = (0.55 + 0.25 * math.sin(t * 1.9)) if siempre_ else 0.0
+                fuerza_ = max(min(vel_ * 3, 1.0) if vel_ > 0.05 else 0.0, base_)
+                if fuerza_ > 0.02:
+                    k_ = int(3 + (min(vel_, 1.2) * 14 + (18 * base_ if siempre_ else 0)) * mb * 1.3) | 1
+                    mbp = (k_, fuerza_ * min(mb * 1.6, 1.0), siempre_, style.get("motionBlurSobre", "fondo") == "fondo")
+            if style["zoomBN"] and s > 1.03:
+                bn_w = clamp((s - 1.03) / 0.05)
         out = None
         if not usa_cpu:
             def pon_detras(layer, back=back, t=t):  # los textos "detrás de ti" se dibujan sobre el fondo, en CPU
@@ -824,7 +832,7 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
                 for e in back:
                     con_opacidad(layer, e, lambda e=e: draw_event(layer, sprites[e["id"]], e, t, W, H))
                 return layer
-            out = G.frame(f, a, s, cx_z, cy_z, ops, w_, osc, pon_detras if back else None)
+            out = G.frame(f, a, s, cx_z, cy_z, ops, w_, osc, pon_detras if back else None, mbp, bn_w)
         if out is None:
             f = apply_look(f)
             f = filtros.aplicar(f, plan, t, W)
