@@ -17,9 +17,9 @@ export default async function register({ route, config }) {
     return fs.existsSync(v) ? v : null;
   };
   const dir = (id) => {
-    if (!/^[a-z0-9]+$/.test(id)) throw new Error('Proyecto inválido');
+    if (!/^[a-z0-9]+$/.test(id)) throw Object.assign(new Error('Proyecto inválido'), { status: 400 });
     const d = path.join(base, id);
-    if (!fs.existsSync(d)) throw new Error('Proyecto no encontrado');
+    if (!fs.existsSync(d)) throw Object.assign(new Error('Proyecto no encontrado'), { status: 404 });
     return d;
   };
   const readJson = (d, name, fb = null) => { try { return JSON.parse(fs.readFileSync(path.join(d, name), 'utf8')); } catch { return fb; } };

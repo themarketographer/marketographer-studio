@@ -98,7 +98,9 @@ def main():
             render.run(proj, a.calidad, a.desde, a.hasta, tramo=tramo, salida=a.salida if tramo else None, hilos=a.hilos or None)
     except Exception as e:
         traceback.print_exc()
-        status(proj, "error", 0, str(e), error=str(e))
+        # ffmpeg que no puede leer el archivo: el texto técnico queda en el log, el usuario ve algo entendible
+        txt = "No pude leer este archivo. Revisa que sea un video válido (MP4 o MOV) y que no esté dañado." if "ffmpeg" in str(e).lower() and "non-zero exit" in str(e) else str(e)
+        status(proj, "error", 0, txt, error=txt)
         sys.exit(1)
 
 

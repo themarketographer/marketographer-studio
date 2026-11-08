@@ -158,8 +158,8 @@ http.createServer(async (req, res) => {
     const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     serveFile(res, path.join(ROOT, 'web', path.normalize(rel).replace(/^(\.\.[\/\\])+/, '')), req);
   } catch (e) {
-    console.error(e);
-    send(res, 500, { error: String(e.message || e) });
+    if (!e.status) console.error(e);
+    send(res, e.status || 500, { error: String(e.message || e) });
   }
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`\n  Estudio listo en http://localhost:${PORT}\n  Módulos: ${modules.map((m) => m.id).join(', ')}\n  Cierra esta ventana para apagarlo.\n`);
