@@ -510,9 +510,9 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 
 /* ---------- Espacio de trabajo en pantalla ancha: video | ajustes | línea de tiempo, acoplados, con divisores que se arrastran ---------- */
 @media (min-width: 900px) {
-  .ed.ws { display: grid; grid-template-columns: var(--col-video, 420px) 10px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 10px var(--alto-tl, 300px); gap: 0; align-items: stretch; margin-top: 8px;
+  .ed.ws { display: grid; grid-template-columns: var(--col-video, 420px) 10px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 10px fit-content(var(--alto-tl, 300px)); gap: 0; align-items: stretch; margin-top: 8px;
     height: max(560px, calc(100vh - var(--ws-top, 160px) - 12px)); }
-  .ed.ws:not(:has(.lt)) { grid-template-rows: minmax(0, 1fr) 0 0; }
+  .ed.ws:not(:has(.lt)) { grid-template-rows: minmax(0, 1fr) 0 0; --tl-res: 0px; }
   .ed.ws:has(.lt:not(.abierto)) { grid-template-rows: minmax(0, 1fr) 4px auto; }
   .ed.ws > .col-video { grid-area: 1 / 1; position: static; max-height: none; height: 100%; overflow-y: auto; min-width: 0; padding-right: 4px; }
   .ed.ws > .col-set { grid-area: 1 / 3; min-width: 0; height: 100%; overflow-y: auto; padding: 0 4px 0 6px; align-content: start; }
@@ -528,7 +528,7 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
   .ws-div::after { content: ''; position: absolute; background: var(--border); border-radius: 3px; transition: background 150ms var(--ease); }
   .ws-div-v::after { left: 3px; right: 3px; top: 25%; bottom: 25%; } .ws-div-h::after { top: 3px; bottom: 3px; left: 25%; right: 25%; }
   .ws-div:hover::after, .ws-div.on::after, .ws-div:focus-visible::after { background: var(--accent); }
-  .ed.ws .col-video .phone { width: min(100%, max(180px, calc((100vh - var(--ws-top, 160px) - var(--alto-tl, 300px) - 170px) * 9 / 16))); }
+  .ed.ws .col-video .phone { width: min(100%, max(180px, calc((100vh / var(--esc, .9) - var(--ws-top, 160px) - var(--tl-res, var(--alto-tl, 300px)) - 150px) * 9 / 16))); }
   .ed.ws .col-video .phone.ancho { width: 100%; }
   .ed.ws .sticky-ex { position: static; border-top: 0; padding: 4px 0; }
   .ed.ws.solo { grid-template-columns: minmax(0, 1fr) 0 0; }

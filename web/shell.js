@@ -11,6 +11,8 @@ const ICONS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  'chev-izq': '<path d="M15 6l-6 6 6 6"/>',
+  'chev-der': '<path d="M9 6l6 6-6 6"/>',
   folder: '<path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
 };
 export const icon = (name, size = 18) =>
@@ -56,7 +58,7 @@ let modules = [];
 
 function renderNav(activeId) {
   nav.replaceChildren(...modules.map((m) => {
-    const a = h('a', { href: `#/${m.id}`, 'aria-current': m.id === activeId ? 'page' : null },
+    const a = h('a', { href: `#/${m.id}`, title: m.nombre, 'aria-current': m.id === activeId ? 'page' : null },
       h('span', { html: icon(m.icono) }), m.nombre,
       m.estado !== 'listo' ? h('span', { class: 'pill' }, 'Pronto') : null);
     return h('li', {}, a);
@@ -143,3 +145,14 @@ document.getElementById('resp-btn')?.addEventListener('click', async () => {
   pintar();
 });
 addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelector('.resp-fondo')?.remove(); });
+
+// Barra lateral colapsable (se recuerda en este navegador).
+(() => {
+  const app = document.querySelector('.app'), brand = document.querySelector('.brand'); if (!app || !brand) return;
+  const b = h('button', { type: 'button', class: 'side-toggle', 'aria-label': 'Ocultar o mostrar el menú', title: 'Ocultar o mostrar el menú' });
+  const poner = (c) => { app.classList.toggle('colapsado', c); b.setAttribute('aria-expanded', String(!c)); b.innerHTML = icon(c ? 'chev-der' : 'chev-izq', 16); try { localStorage.setItem('estudio.menu', c ? '1' : '0'); } catch { /* sin almacenamiento */ } };
+  b.onclick = () => { poner(!app.classList.contains('colapsado')); setTimeout(() => dispatchEvent(new Event('resize')), 240); };
+  brand.append(b);
+  let c = false; try { c = localStorage.getItem('estudio.menu') === '1'; } catch { /* sin almacenamiento */ }
+  poner(c);
+})();

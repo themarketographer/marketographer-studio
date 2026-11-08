@@ -58,8 +58,10 @@ if [ -x "$RT/node/bin/node" ]; then NODE="$RT/node/bin/node"; else NODE="$(comma
 PORT=4177
 URL="http://localhost:$PORT"
 # Si el Estudio ya tiene su ventana abierta, un clic en el Dock solo la trae al frente.
-if pgrep -f "user-data-dir=$GUARDA/ventana" >/dev/null 2>&1; then
-  osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || osascript -e 'tell application "Microsoft Edge" to activate' >/dev/null 2>&1
+PID_V="$(pgrep -f "user-data-dir=$GUARDA/ventana" | head -1)"
+if [ -n "$PID_V" ]; then
+  # Se trae al frente solo la ventana del Estudio (su proceso), sin tocar tu Chrome de siempre: así no se abre ninguna pestaña nueva.
+  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $PID_V) to true" >/dev/null 2>&1
   exit 0
 fi
 mkdir -p data

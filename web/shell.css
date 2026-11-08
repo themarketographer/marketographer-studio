@@ -124,3 +124,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline: 2
 @keyframes resp-in { from { opacity: 0 } } @keyframes resp-caja { from { opacity: 0; transform: translateY(10px) scale(.97) } }
 @media (prefers-reduced-motion: reduce) { .resp-fondo, .resp-caja { animation: none; } }
 .escala[hidden] { display: none; }
+
+/* Barra lateral colapsable: se queda solo con los iconos */
+.side-toggle { margin-left: auto; width: 30px; height: 30px; flex: none; border: 1px solid var(--border); background: transparent; color: var(--ink-muted); border-radius: var(--radius-sm); cursor: pointer; display: grid; place-items: center; }
+.side-toggle:hover { background: var(--cream-2); color: var(--ink); }
+.app { transition: grid-template-columns 220ms var(--ease); }
+.app.colapsado { grid-template-columns: 68px 1fr; }
+.app.colapsado .side { padding: 22px 10px; overflow: hidden; }
+.app.colapsado .brand { flex-direction: column; padding: 0; gap: 12px; } .app.colapsado .brand > span:not(.brand-mark), .app.colapsado .side-foot, .app.colapsado .escala, .app.colapsado .resp-btn, .app.colapsado .pill { display: none; }
+.app.colapsado .brand .side-toggle { margin: 0; }
+.app.colapsado #nav a { font-size: 0; gap: 0; justify-content: center; padding: 11px 0; } .app.colapsado #nav a:hover { transform: none; }
+@media (max-width: 800px) { .side-toggle { display: none; } }

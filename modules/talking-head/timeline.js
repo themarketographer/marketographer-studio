@@ -38,7 +38,9 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   el.classList.toggle('abierto', abierto);
 
   const xDe = (t) => t * pxs;
-  const tDe = (clientX) => Math.max(0, Math.min(dur(), (clientX - inner.getBoundingClientRect().left) / pxs));
+  // El Estudio escala la interfaz con zoom: el mouse viene en píxeles de pantalla y pxs en píxeles de diseño.
+  const zk = () => inner.getBoundingClientRect().width / (inner.offsetWidth || 1) || 1;
+  const tDe = (clientX) => Math.max(0, Math.min(dur(), (clientX - inner.getBoundingClientRect().left) / zk() / pxs));
   function zoom(f, cx) {
     ajustar = false;
     const w = scroll.clientWidth, c = cx == null ? scroll.scrollLeft + w / 2 : cx, t = c / pxs;
@@ -122,8 +124,9 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     else if (sel) k.push(h('span', { class: 'lt-nota-t' }, 'Supr lo borra · flechas lo mueven'));
     void c; accion.replaceChildren(...k);
   }
+  let tArrastre = null;  // mientras arrastras, la cabeza sigue al mouse y no espera a que el video termine de saltar
   function cabeza(forzar) {
-    const v = getVideo(), t = v ? v.currentTime || 0 : 0, ph = inner.querySelector('.lt-cabeza');
+    const v = getVideo(), t = tArrastre != null ? tArrastre : v ? v.currentTime || 0 : 0, ph = inner.querySelector('.lt-cabeza');
     if (ph) ph.style.transform = `translateX(${xDe(t)}px)`;
     info.textContent = `${mmss(t, 1)} / ${mmss(dur(), 1)}`;
     if (v && !v.paused && !forzar) { const x = xDe(t); if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth - 20) scroll.scrollLeft = Math.max(0, x - 40); }
@@ -132,7 +135,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   raf = requestAnimationFrame(bucle);
   let pend = 0;
   scroll.addEventListener('scroll', () => { if (pend) return; pend = requestAnimationFrame(() => { pend = 0; pintarOnda(); if (hoyPalabras()) pintar(); }); });
-  scroll.addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - scroll.getBoundingClientRect().left + scroll.scrollLeft); }, { passive: false });
+  scroll.addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, (e.clientX - scroll.getBoundingClientRect().left) / zk() + scroll.scrollLeft); }, { passive: false });
   const ro = new ResizeObserver(() => { if (ajustar) pintar(); });
   ro.observe(scroll);
 
@@ -170,7 +173,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     nodo2.setPointerCapture?.(e.pointerId);
     const mover = (ev) => {
       if (!movido && Math.abs(ev.clientX - x0) < 3) return; movido = true;
-      const dt = (ev.clientX - x0) / pxs, libre = ev.altKey || !iman;
+      const dt = (ev.clientX - x0) / zk() / pxs, libre = ev.altKey || !iman;
       let na = a0, nb = b0, pegado = null;
       if (modo === 'mover') {
         na = a0 + dt; nb = b0 + dt;
@@ -183,7 +186,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
       inner.querySelector('.lt-guia')?.remove();
       if (pegado != null) inner.append(h('i', { class: 'lt-guia', style: `left:${xDe(pegado)}px` }));
       tooltip.hidden = false; tooltip.textContent = esZ ? mmss(a, 1) : `${mmss(a, 1)} → ${mmss(b, 1)}`;
-      const er = el.getBoundingClientRect(); tooltip.style.left = `${ev.clientX - er.left + 10}px`; tooltip.style.top = `${ev.clientY - er.top - 28}px`;
+      const er = el.getBoundingClientRect(); tooltip.style.left = `${(ev.clientX - er.left) / zk() + 10}px`; tooltip.style.top = `${(ev.clientY - er.top) / zk() - 28}px`;
     };
     const fin = () => {
       removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); tooltip.hidden = true;
@@ -192,8 +195,8 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     addEventListener('pointermove', mover); addEventListener('pointerup', fin);
   }
   function arrastrarRegla(e) {
-    const mover = (ev) => onIr(tDe(ev.clientX)); mover(e);
-    const fin = () => { removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); };
+    const mover = (ev) => { tArrastre = tDe(ev.clientX); onIr(tArrastre); cabeza(true); }; mover(e);
+    const fin = () => { tArrastre = null; removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); };
     addEventListener('pointermove', mover); addEventListener('pointerup', fin);
   }
   function arrastrarVoz(e) {
