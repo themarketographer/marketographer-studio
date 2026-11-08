@@ -308,7 +308,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   // ---------- vocabulario: se guarda en este navegador y se copia al motor ----------
   async function sincronizarVocab() {
     const sv = await api(A + '/vocabulario').catch(() => null);
-    if (S.aj.vocab) { await api(A + '/vocabulario', { method: 'PUT', body: S.aj.vocab }).catch(() => {}); }
+    if (S.aj.vocab) { if (JSON.stringify(sv) !== JSON.stringify(S.aj.vocab)) await api(A + '/vocabulario', { method: 'PUT', body: S.aj.vocab }).catch(() => {}); }
     else if (sv) { S.aj.vocab = { terminos: sv.terminos || [], reemplazos: sv.reemplazos || [] }; guardarAjustes(S.aj); }
   }
   async function guardarVocab(v) { S.aj.vocab = v; guardarAjustes(S.aj); await api(A + '/vocabulario', { method: 'PUT', body: v }); }
