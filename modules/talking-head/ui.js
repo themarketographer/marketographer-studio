@@ -995,7 +995,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     cierre: ['Tarjeta final', 'El cierre con tu llamado a la acción.', () => panelCierre()],
     publicar: ['Portada y caption', 'Todo lo que necesitas para publicar.', () => panelPublicar()],
     propiedades: ['Propiedades', 'Los ajustes de lo que elegiste en la línea de tiempo.', () => cuerpoPropiedades(S.selTL, { h, seg, slider, toggle, plan, cambio, refrescar, irPaso, filaTitulo, cuerpoFrase, cuerpoSticker, cuerpoEscena, cuerpoEspecial, cuerpoClip, abrirTitulo: (id) => S.abiertos.add(id) })],
-    exportar: ['Exportar', 'Elige para dónde es el video.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, verUltimo: () => { cerrarHoja(); verResultado('final'); }, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
+    exportar: ['Exportar', 'Elige para dónde es el video.', () => hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, pausarVista: () => live && live.pausar(), verUltimo: () => { cerrarHoja(); verResultado('final'); }, repintar: pintarPanel, exportarFinal: () => { cerrarHoja(); lanzar('renderizar', { calidad: 'final' }, true); } })],
     ajustes: ['Ajustes', 'Se guardan en este navegador y valen para todos tus videos.', () => panelAjustes()],
   };
   function abrirHoja(id) {

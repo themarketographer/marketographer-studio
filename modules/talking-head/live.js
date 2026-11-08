@@ -1108,6 +1108,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     antes: (v) => { antes = !!v; sucio = true; if (!v) tAud = -1; },
     ir: (t) => { vs.currentTime = t; va.currentTime = t; sucio = true; matteT = -1; },
     alternar,
+    pausar: () => { if (!vs.paused) vs.pause(); },
     destroy: () => { vivo = false; clipEls.forEach((el) => { if (el.tagName === 'VIDEO') { el.pause(); el.removeAttribute('src'); el.load(); } }); if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; master = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
   };
 }

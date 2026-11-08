@@ -3,7 +3,7 @@ const CAL = [[16, 'Alta'], [10, 'Media'], [4, 'Liviana']];
 const FPS = [[0, 'Igual'], [24, '24'], [30, '30'], [60, '60']];
 const FORM = [['h264', 'MP4 H.264'], ['hevc', 'MP4 HEVC'], ['prores', 'MOV ProRes']];
 
-export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, verUltimo, repintar }) {
+export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, verUltimo, repintar, pausarVista }) {
   const id = S.p.id, base = `/api${A}/proyectos/${id}`;
   const { presets } = await api(`${A}/presets-export`);
   const lista = await api(`${A}/proyectos/${id}/exportados`).catch(() => []);
@@ -44,6 +44,7 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
     if (aj.exportCustomOn) tareas.push({ preset: 'custom', custom: { codec: C.codec, corto: C.corto, fps: C.fps || null, mbps: C.mbps, lufs: C.lufs ? -14 : null, n: 'Personalizado' } });
     if (!tareas.length) { toast('Marca al menos un formato.'); return; }
     btn.disabled = true; progreso.hidden = false; barra.style.width = '0%';
+    if (pausarVista) pausarVista(); // reproducir mientras se exporta le quita GPU a la exportación
     try {
       if (necesitaFinal()) {
         estado.textContent = 'Armando el video final…';
