@@ -5,3 +5,9 @@ pillow
 faster-whisper
 imageio-ffmpeg
 mlx; sys_platform == "darwin" and platform_machine == "arm64"
+numba; sys_platform == "darwin" and platform_machine == "arm64"
+tiktoken; sys_platform == "darwin" and platform_machine == "arm64"
+more-itertools; sys_platform == "darwin" and platform_machine == "arm64"
+huggingface_hub; sys_platform == "darwin" and platform_machine == "arm64"
+scipy; sys_platform == "darwin" and platform_machine == "arm64"
+tqdm; sys_platform == "darwin" and platform_machine == "arm64"

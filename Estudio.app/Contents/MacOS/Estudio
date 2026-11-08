@@ -28,7 +28,7 @@ RT="$ROOT/.runtime"
 
 # ---- ¿falta preparar algo? (Node, Python y librerías, modelos) ----
 HUELLA="$(shasum -a 256 modules/talking-head/engine/requirements.txt 2>/dev/null | cut -c1-16)"
-listo() { { [ -x "$RT/node/bin/node" ] || command -v node >/dev/null 2>&1; } && [ -x "$ROOT/.venv/bin/python" ] && [ "$(cat "$RT/requisitos" 2>/dev/null)" = "$HUELLA" ] && [ -f "$RT/modelos" ]; }
+listo() { { [ -x "$RT/node/bin/node" ] || command -v node >/dev/null 2>&1; } && [ -x "$ROOT/.venv/bin/python" ] && [ "$(cat "$RT/requisitos" 2>/dev/null)" = "$HUELLA" ] && [ -f "$RT/modelos2" ]; }
 preparar() {
   rm -f "$RT/listo" "$RT/error"; mkdir -p "$RT"
   if [ -n "$ESTUDIO_AUTO" ]; then bash preparar.sh; return; fi  # modo de pruebas: sin ventana de Terminal

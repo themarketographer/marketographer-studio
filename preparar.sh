@@ -51,12 +51,14 @@ if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c "import sys; assert sys.ve
 fi
 if [ "$(cat "$RT/requisitos" 2>/dev/null)" != "$HUELLA" ]; then
   "$UV" pip install --python .venv/bin/python -r "$REQ" || falla "Falló la instalación de las librerías."
+  # Whisper en la GPU: se instala sin sus dependencias porque pide torch (580 MB) solo para un archivo de conversión que no usamos.
+  [ "$ARQ" = "arm64" ] && { "$UV" pip install --python .venv/bin/python --no-deps mlx-whisper || echo "Sin Whisper en la GPU: se usará el procesador."; }
   echo "$HUELLA" > "$RT/requisitos"
 else echo "Listo."; fi
 
 paso "4/5 Modelos (recorte de fondo y reconocimiento de voz)"
 if [ -n "$ESTUDIO_SALTAR_MODELOS" ]; then echo "Omitido."
-elif [ -f "$RT/modelos" ]; then echo "Listo."
+elif [ -f "$RT/modelos2" ]; then echo "Listo."
 else
   ./.venv/bin/python - <<'PY' || falla "No pude bajar los modelos. Revisa tu internet y vuelve a abrir el Estudio."
 import sys
@@ -65,9 +67,14 @@ import common
 common.ensure_model()
 from faster_whisper import WhisperModel
 WhisperModel("small", device="cpu", compute_type="int8")
+try:
+    import mlx_whisper, numpy as np
+    mlx_whisper.transcribe(np.zeros(16000, np.float32), path_or_hf_repo="mlx-community/whisper-small-mlx", language="es")  # baja y prueba el modelo de la GPU
+except Exception as e:
+    print("Whisper en la GPU no disponible:", type(e).__name__)
 print("Modelos listos.")
 PY
-  touch "$RT/modelos"
+  touch "$RT/modelos2"
 fi
 
 rm -rf "$RT/cache"  # la caché de instalación ya no hace falta (ahorra unos 300 MB)
