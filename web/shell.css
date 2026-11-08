@@ -123,3 +123,4 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline: 2
 .resp-pie { display: flex; gap: 8px; justify-content: space-between; margin-top: 12px; }
 @keyframes resp-in { from { opacity: 0 } } @keyframes resp-caja { from { opacity: 0; transform: translateY(10px) scale(.97) } }
 @media (prefers-reduced-motion: reduce) { .resp-fondo, .resp-caja { animation: none; } }
+.escala[hidden] { display: none; }
