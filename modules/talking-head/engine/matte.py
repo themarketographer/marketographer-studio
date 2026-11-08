@@ -1,5 +1,5 @@
 """Separa a la persona del fondo con Robust Video Matting y guarda la máscara como video."""
-import subprocess
+import os, subprocess
 from pathlib import Path
 import cv2, numpy as np, onnxruntime as ort
 from common import correr_tramos, ffmpeg_exe, encoder_args, ensure_model, hilos_auto, status
@@ -7,9 +7,11 @@ from common import correr_tramos, ffmpeg_exe, encoder_args, ensure_model, hilos_
 CALENTAR = 60  # el modelo recuerda el cuadro anterior: cada tramo arranca unos cuadros antes y los descarta
 
 
-def run(proj, long_side=960, ratio=0.4, base=50, span=45, hilos=None, tramo=None, salida=None):
+def run(proj, long_side=768, ratio=0.4, base=50, span=45, hilos=None, tramo=None, salida=None):
     """tramo=(k0, k1) y salida: modo trabajador, recorta solo esos cuadros (k1=None: hasta el final). hilos=1 fuerza un solo proceso."""
     proj = Path(proj)
+    long_side = int(os.environ.get("ESTUDIO_MATTE_LADO", long_side))  # los procesos hijos heredan esto
+    ratio = float(os.environ.get("ESTUDIO_MATTE_RATIO", ratio))
     cap = cv2.VideoCapture(str(proj / "source.mp4"))
     W, H = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
