@@ -56,7 +56,7 @@ PROHIBIDO:
 - Aperturas con "Hoy vamos a hablar de" o saludos.
 - Bullets dentro del guion hablado. El guion va en prosa.`;
 
-export function construirPrompt({ tema, clase, formato }) {
+export function construirPrompt({ tema, clase, formato, referencias = [] }) {
   const f = FORMATOS[formato];
   if (!f) throw new Error('Formato desconocido');
   const material = clase?.resumen
@@ -65,6 +65,10 @@ export function construirPrompt({ tema, clase, formato }) {
   const preguntas = clase?.preguntas?.length
     ? `PREGUNTAS REALES DE LOS ALUMNOS EN ESA CLASE:\n${clase.preguntas.map((q) => `- ${q}`).join('\n')}`
     : '';
+  const refs = referencias.length
+    ? `REFERENCIAS QUE ME INSPIRAN (toma la mecánica y adáptala a mi voz; no copies sus palabras):\n${referencias.map((r) => `- ${r.titulo || r.url} (${r.plataforma}) ${r.url}${r.robar?.length ? ` · quiero robar: ${r.robar.join(', ')}` : ''}${r.nota ? ` · ${r.nota}` : ''}`).join('\n')}`
+    : '';
+  const notas = tema.notas?.trim() ? `NOTAS MÍAS SOBRE EL TEMA:\n${tema.notas.trim()}` : '';
   return `Escribe un guion de ${f.nombre} para TikTok y Reels.
 
 TEMA: ${tema.titulo}
@@ -72,6 +76,8 @@ ${tema.angulo ? `ÁNGULO QUE QUIERO: ${tema.angulo}\n` : ''}DURACIÓN: ${f.durac
 
 ${material}
 ${preguntas}
+${notas}
+${refs}
 
 ESTRUCTURA:
 ${f.estructura.map((e, i) => `${i + 1}. ${e}`).join('\n')}

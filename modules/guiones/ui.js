@@ -29,11 +29,11 @@ function doble(h, { clase, icono, texto, aviso, accion }) {
 }
 
 export async function mount(root, { api, toast, h, icon }) {
-  const S = { clases: [], temas: [], guiones: [], formatos: [], sel: null, formato: 'talking-head', filtro: 'todos', q: '', borrador: '' };
+  const S = { clases: [], temas: [], guiones: [], formatos: [], refs: [], vista: 'guiones', rq: '', rEstado: 'todas', rRobar: '', sel: null, formato: 'talking-head', filtro: 'todos', q: '', borrador: '' };
 
   async function cargar() {
-    [S.clases, S.temas, S.guiones, S.formatos] = await Promise.all([
-      api('/guiones/clases'), api('/guiones/temas'), api('/guiones/guiones'), api('/guiones/formatos'),
+    [S.clases, S.temas, S.guiones, S.formatos, S.refs] = await Promise.all([
+      api('/guiones/clases'), api('/guiones/temas'), api('/guiones/guiones'), api('/guiones/formatos'), api('/guiones/referencias'),
     ]);
     if (!S.temas.find((t) => t.id === S.sel)) S.sel = null;
   }
@@ -151,6 +151,9 @@ export async function mount(root, { api, toast, h, icon }) {
       h('p', { class: 'sub' }, clase ? `De la clase: ${clase.titulo}` : 'Sin clase asociada'),
       h('label', { class: 'field' }, 'Ángulo (opcional)',
         h('input', { value: t.angulo || '', placeholder: 'Ej: dirigido a fotógrafos de bodas', onchange: (e) => guardarTema({ angulo: e.target.value }) })),
+      h('label', { class: 'field' }, 'Notas e ideas (opcional)',
+        h('textarea', { rows: 3, placeholder: 'Apuntes sueltos, frases que te gustaron, ejemplos, datos. Se incluyen en el prompt.', onchange: (e) => guardarTema({ notas: e.target.value }) }, t.notas || '')),
+      refsDelTema(t),
 
       h('div', { class: 'formats', role: 'tablist', 'aria-label': 'Formato' }, S.formatos.map((x) =>
         h('button', { role: 'tab', class: 'format' + (x.id === S.formato ? ' on' : ''), 'aria-selected': x.id === S.formato,
@@ -270,13 +273,82 @@ export async function mount(root, { api, toast, h, icon }) {
     document.body.append(ov); aplicar(); document.addEventListener('keydown', tecla); raf = requestAnimationFrame(paso); cuerpo.focus();
   }
 
+  // ---------- Referencias: videos de otros para robar la mecánica ----------
+  const ROBAR = ['Gancho', 'Estructura', 'Edición', 'Tema', 'Música', 'Estilo', 'Voz'];
+  const REF_ESTADOS = [['porver', 'Por ver'], ['vista', 'Vista'], ['usada', 'Usada']];
+  const ytId = (u) => { try { const x = new URL(u); if (/youtu\.be$/.test(x.hostname)) return x.pathname.slice(1, 12); if (/youtube\.com$/.test(x.hostname)) return x.searchParams.get('v') || (/^\/(shorts|embed|live)\/([\w-]{11})/.exec(x.pathname) || [])[2] || null; } catch { /* link raro */ } return null; };
+  async function guardarRef(r, patch, repintar) {
+    try { Object.assign(r, await api('/guiones/referencias', { method: 'POST', body: { id: r.id, ...patch } })); } catch (e) { return toast(e.message); }
+    if (repintar) render(true);
+  }
+  function refsDelTema(t) {
+    const rs = S.refs.filter((r) => r.temaId === t.id);
+    if (!rs.length) return null;
+    return h('div', { class: 'refs-tema' }, h('strong', {}, `Referencias de este tema (${rs.length})`),
+      h('ul', {}, rs.map((r) => h('li', {}, h('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, r.titulo || r.url),
+        h('small', {}, ` ${r.plataforma}${r.robar?.length ? ' · ' + r.robar.join(', ') : ''}`)))));
+  }
+  function tarjetaRef(r) {
+    const id = ytId(r.url);
+    const miniatura = id ? h('img', { class: 'ref-img', src: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+      : h('div', { class: 'ref-img ref-ph' }, r.plataforma);
+    const copiaUrl = h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copiar(r.url, 'Link copiado.'), html: icon('copy') + ' Copiar link' });
+    return h('li', { class: 'ref' + (r.estado === 'usada' ? ' usada' : '') },
+      h('a', { class: 'ref-thumb', href: r.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir el video', title: 'Abrir el video' }, miniatura),
+      h('div', { class: 'ref-body' },
+        h('div', { class: 'row-between' },
+          h('input', { class: 'ref-titulo', value: r.titulo || '', placeholder: 'Ponle un título para reconocerlo', 'aria-label': 'Título', onchange: (e) => guardarRef(r, { titulo: e.target.value.trim() }) }),
+          h('span', { class: 'tag' }, r.plataforma)),
+        h('a', { class: 'ref-url', href: r.url, target: '_blank', rel: 'noopener noreferrer' }, r.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 70)),
+        h('div', { class: 'filters', role: 'group', 'aria-label': 'Qué quieres robar' }, ROBAR.map((x) => {
+          const on = (r.robar || []).includes(x);
+          return h('button', { type: 'button', class: 'f' + (on ? ' on' : ''), 'aria-pressed': String(on),
+            onclick: () => guardarRef(r, { robar: on ? r.robar.filter((y) => y !== x) : [...(r.robar || []), x] }, true) }, x);
+        })),
+        h('textarea', { rows: 2, class: 'ref-nota', placeholder: '¿Qué quieres robar? Ej: arranca con una pregunta incómoda y corta cada 3 segundos', 'aria-label': 'Nota', onchange: (e) => guardarRef(r, { nota: e.target.value }) }, r.nota || ''),
+        h('div', { class: 'ref-acc' },
+          h('select', { 'aria-label': 'Estado', onchange: (e) => guardarRef(r, { estado: e.target.value }, true) }, REF_ESTADOS.map(([v, n]) => h('option', { value: v, selected: (r.estado || 'porver') === v }, n))),
+          h('select', { 'aria-label': 'Asociar a un tema', onchange: (e) => guardarRef(r, { temaId: e.target.value || null }) },
+            h('option', { value: '' }, 'Sin tema'), S.temas.map((t) => h('option', { value: t.id, selected: r.temaId === t.id }, t.titulo.slice(0, 50)))),
+          r.temaId ? null : h('button', { type: 'button', class: 'btn gold sm', onclick: async () => { try { const t = await api(`/guiones/referencias/${r.id}/a-tema`, { method: 'POST' }); await cargar(); S.vista = 'guiones'; S.sel = t.id; render(); toast('Tema creado desde la referencia.'); } catch (e) { toast(e.message); } } }, 'Crear tema'),
+          copiaUrl,
+          doble(h, { clase: 'btn danger sm', icono: icon('trash'), texto: 'Borrar', aviso: '¿Seguro? Pulsa otra vez', accion: async () => { await api('/guiones/referencias/' + r.id, { method: 'DELETE' }); await cargar(); render(); } }))));
+  }
+  function referencias() {
+    const entrada = h('textarea', { rows: 2, placeholder: 'Pega uno o varios links (YouTube, TikTok, Instagram…) y pulsa Guardar', 'aria-label': 'Links de videos' });
+    const agregar = async () => {
+      const links = entrada.value.match(/https?:\/\/\S+/g) || [];
+      if (!links.length) return toast('Pega al menos un link que empiece con http.');
+      let ok = 0, falla = '';
+      for (const url of links) { try { await api('/guiones/referencias', { method: 'POST', body: { url } }); ok++; } catch (e) { falla = e.message; } }
+      await cargar(); S.rEstado = 'todas'; render();
+      toast(ok ? `${ok} link${ok === 1 ? '' : 's'} guardado${ok === 1 ? '' : 's'}.${falla ? ' ' + falla : ''}` : falla);
+    };
+    entrada.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); agregar(); } });
+    const q = S.rq.toLowerCase();
+    const lista = S.refs.filter((r) => (S.rEstado === 'todas' || (r.estado || 'porver') === S.rEstado) && (!S.rRobar || (r.robar || []).includes(S.rRobar))
+      && (!q || [r.titulo, r.nota, r.url, r.plataforma].join(' ').toLowerCase().includes(q)));
+    const nodos = h('ul', { class: 'refs' }, lista.length ? lista.map(tarjetaRef) : h('li', { class: 'vacio' }, S.refs.length ? 'Nada con ese filtro.' : 'Aquí guardas los videos de otros que te gustaría "robar como artista": el gancho, la estructura, la edición. Pega el primer link arriba.'));
+    return h('section', { class: 'col-main refs-main' },
+      h('div', {}, h('h2', {}, 'Referencias'), h('p', { class: 'sub' }, 'Roba la mecánica, no las palabras: guarda el link, marca qué te gustó y conviértelo en un tema. Tus notas viajan en el prompt para Claude.')),
+      h('div', { class: 'ref-add' }, entrada, h('button', { class: 'btn gold', onclick: agregar, title: 'Atajo: Cmd o Ctrl + Enter', html: icon('plus') + ' Guardar' })),
+      h('div', { class: 'ref-filtros' },
+        h('input', { type: 'search', placeholder: 'Buscar en títulos, notas y links', 'aria-label': 'Buscar referencias', value: S.rq, oninput: (e) => { S.rq = e.target.value; render(true); } }),
+        h('div', { class: 'filters', role: 'group', 'aria-label': 'Filtrar por estado' }, [['todas', 'Todas'], ...REF_ESTADOS].map(([id, n]) =>
+          h('button', { class: 'f' + (S.rEstado === id ? ' on' : ''), 'aria-pressed': S.rEstado === id, onclick: () => { S.rEstado = id; render(); } }, n))),
+        h('div', { class: 'filters', role: 'group', 'aria-label': 'Filtrar por lo que robas' }, ROBAR.map((x) =>
+          h('button', { class: 'f' + (S.rRobar === x ? ' on' : ''), 'aria-pressed': S.rRobar === x, onclick: () => { S.rRobar = S.rRobar === x ? '' : x; render(); } }, x)))),
+      nodos);
+  }
+
   // ---------- Render ----------
   function render(soloLista) {
     const y = window.scrollY;
+    const pestana = (id, n) => h('button', { role: 'tab', class: 'f' + (S.vista === id ? ' on' : ''), 'aria-selected': String(S.vista === id), onclick: () => { S.vista = id; render(); } }, n);
     root.replaceChildren(
-      h('div', { class: 'page-head' }, h('h1', {}, 'Guiones'), h('p', {}, 'De una clase a un guion listo para grabar, en tres pasos.')),
-      semana(),
-      h('div', { class: 'cols' }, lista(), detalle()));
+      h('div', { class: 'page-head' }, h('h1', {}, 'Guiones'), h('p', {}, 'De una idea o de una clase a un guion listo para grabar.')),
+      h('div', { class: 'filters vistas', role: 'tablist', 'aria-label': 'Secciones' }, pestana('guiones', `Temas y guiones (${S.temas.length})`), pestana('referencias', `Referencias (${S.refs.length})`)),
+      ...(S.vista === 'referencias' ? [referencias()] : [semana(), h('div', { class: 'cols' }, lista(), detalle())]));
     if (soloLista) { const i = root.querySelector('input[type=search]'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
     else window.scrollTo(0, y);
   }

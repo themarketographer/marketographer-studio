@@ -78,11 +78,43 @@ export default async function register({ route, store, config }) {
   route.post('/guiones', ({ body }) => store.upsert('guiones', body));
   route.delete('/guiones/:id', ({ params }) => store.remove('guiones', params.id));
 
+  // Referencias: links de videos de otros para "robar como artista" (la mecánica, no las palabras)
+  const PLATAFORMAS = [[/youtu\.?be/, 'YouTube'], [/tiktok\.com/, 'TikTok'], [/instagram\.com/, 'Instagram'], [/facebook\.com|fb\.watch/, 'Facebook'], [/(twitter|x)\.com/, 'X'], [/vimeo\.com/, 'Vimeo'], [/linkedin\.com/, 'LinkedIn']];
+  const malo = (m) => Object.assign(new Error(m), { status: 400 });
+  const limpiarUrl = (u) => {
+    let x; try { x = new URL(String(u || '').trim()); } catch { throw malo('Eso no parece un link.'); }
+    if (!/^https?:$/.test(x.protocol)) throw malo('Pega un link que empiece con http o https.');  // evita javascript: en el href
+    return x.href;
+  };
+  const plataformaDe = (url) => (PLATAFORMAS.find(([re]) => re.test(new URL(url).hostname)) || [0, new URL(url).hostname.replace(/^www\./, '')])[1];
+  route.get('/referencias', () => store.list('referencias').sort((a, b) => (b.creado || '').localeCompare(a.creado || '')));
+  route.post('/referencias', ({ body }) => {
+    const patch = { ...body };
+    if (patch.url !== undefined) { patch.url = limpiarUrl(patch.url); patch.plataforma = plataformaDe(patch.url); }
+    if (!patch.id) {
+      if (!patch.url) throw malo('Falta el link.');
+      if (store.list('referencias').some((r) => r.url === patch.url)) throw malo('Ese link ya está guardado.');
+      return store.upsert('referencias', { estado: 'porver', robar: [], etiquetas: [], creado: new Date().toISOString(), ...patch });
+    }
+    return store.upsert('referencias', patch);
+  });
+  route.delete('/referencias/:id', ({ params }) => store.remove('referencias', params.id));
+  // Convierte una referencia en un tema nuevo y la deja asociada
+  route.post('/referencias/:id/a-tema', ({ params }) => {
+    const r = store.list('referencias').find((x) => x.id === params.id);
+    if (!r) throw new Error('Referencia no encontrada');
+    const titulo = (r.titulo || r.nota || `Idea desde ${r.plataforma}`).trim().slice(0, 90);
+    const t = store.upsert('temas', { estado: 'idea', titulo, notas: r.nota || '' });
+    store.upsert('referencias', { id: r.id, temaId: t.id });
+    return t;
+  });
+
   // Prompt listo para pegar en Claude
   route.post('/prompt', ({ body }) => {
     const tema = store.list('temas').find((t) => t.id === body.temaId);
     if (!tema) throw new Error('Tema no encontrado');
     const clase = store.list('clases').find((c) => c.id === tema.claseId);
-    return { prompt: construirPrompt({ tema, clase, formato: body.formato }) };
+    const referencias = store.list('referencias').filter((r) => r.temaId === tema.id);
+    return { prompt: construirPrompt({ tema, clase, formato: body.formato, referencias }) };
   });
 }
