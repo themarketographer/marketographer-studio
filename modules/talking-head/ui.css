@@ -511,7 +511,7 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 /* ---------- Espacio de trabajo en pantalla ancha: video | ajustes | línea de tiempo, acoplados, con divisores que se arrastran ---------- */
 @media (min-width: 900px) {
   .ed.ws { display: grid; grid-template-columns: var(--col-video, 420px) 10px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 10px fit-content(var(--alto-tl, 300px)); gap: 0; align-items: stretch; margin-top: 8px;
-    height: max(560px, calc(100vh - var(--ws-top, 160px) - 12px)); }
+    height: max(480px, calc(100vh / var(--esc, .9) - var(--ws-top, 160px) - 10px)); }
   .ed.ws:not(:has(.lt)) { grid-template-rows: minmax(0, 1fr) 0 0; --tl-res: 0px; }
   .ed.ws:has(.lt:not(.abierto)) { grid-template-rows: minmax(0, 1fr) 4px auto; }
   .ed.ws > .col-video { grid-area: 1 / 1; position: static; max-height: none; height: 100%; overflow-y: auto; min-width: 0; padding-right: 4px; }
@@ -578,3 +578,6 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
   .hoja.abajo .hoja-head { padding-top: 4px; top: 22px; }
   .ed.con-hoja { padding-bottom: var(--hoja-h, 58vh); }
 }
+
+/* Menos texto: las explicaciones largas del editor se quitan (los avisos de estado se quedan) */
+.col-set .sub:not(.vivo), .hoja .sub:not(.vivo) { display: none; }

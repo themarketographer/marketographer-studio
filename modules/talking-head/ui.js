@@ -670,9 +670,10 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const D = leerDiseno();
     const aplicar = () => {
       const r = ed.getBoundingClientRect();
-      ed.style.setProperty('--ws-top', `${Math.round(r.top + window.scrollY)}px`);
+      const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9;  // la interfaz está escalada: las alturas se miden en píxeles de diseño
+      ed.style.setProperty('--ws-top', `${Math.round((r.top + window.scrollY) / z)}px`);
       ed.style.setProperty('--col-video', `${Math.max(260, Math.min(D.v, ed.clientWidth - 380))}px`);
-      ed.style.setProperty('--alto-tl', `${Math.round(Math.max(130, Math.min(D.h ?? window.innerHeight * 0.34, window.innerHeight * 0.45)))}px`);  // la línea de tiempo nunca se come más del 45 % de la altura
+      ed.style.setProperty('--alto-tl', `${Math.round(Math.max(130, Math.min(D.h ?? window.innerHeight * 0.34 / z, window.innerHeight * 0.45 / z)))}px`);  // la línea de tiempo nunca se come más del 45 % de la altura
     };
     aplicar();
     const arrastrar = (div, eje) => div.addEventListener('pointerdown', (e) => {
@@ -1192,14 +1193,14 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { aj.estiloDefecto = aj.estiloDefecto === e.id ? null : e.id; guardar(); pintarPanel(); } }, aj.estiloDefecto === e.id ? 'Ya no usar en nuevos' : 'Usar en videos nuevos'),
         h('button', { type: 'button', class: 'btn danger sm', onclick: () => { aj.estilos = aj.estilos.filter((x) => x.id !== e.id); if (aj.estiloDefecto === e.id) aj.estiloDefecto = null; guardar(); pintarPanel(); } }, 'Quitar'))))) : h('p', { class: 'hint' }, 'Aún no guardaste ningún estilo.');
     const importar = h('input', { type: 'file', accept: 'application/json', hidden: true, onchange: async (e) => { try { const d = JSON.parse(await e.target.files[0].text()); S.aj = { ...AJ_DEF, ...d }; guardarAjustes(S.aj); if (S.aj.vocab) await guardarVocab(S.aj.vocab); toast('Ajustes importados.'); pintarPanel(); } catch { toast('Ese archivo no es una copia de ajustes.'); } } });
-    const cajaTrans = h('section', { class: 'card' }, h('h2', {}, 'Velocidad de la transcripción'), h('p', { class: 'sub' }, 'Cargando…'));
+    const cajaTrans = h('section', { class: 'card' }, h('h2', {}, 'Velocidad de la transcripción'), h('p', { class: 'sub vivo' }, 'Cargando…'));
     api(A + '/transcripcion').then((r) => {
       const poner = (m) => api(A + '/transcripcion', { method: 'PUT', body: { modo: m } }).then(() => pintarTrans(m));
       const pintarTrans = (m) => cajaTrans.replaceChildren(h('h2', {}, 'Velocidad de la transcripción'),
         h('p', { class: 'sub' }, 'La rápida tarda más o menos la mitad en un equipo normal y suele dejar el texto casi igual. La precisa revisa más opciones por palabra y se nota en voces con ruido o nombres raros. Vale para los videos que transcribas desde ahora.'),
         seg('Modo', [['rapida', 'Rápida'], ['precisa', 'Precisa']], m, poner));
       pintarTrans(r.modo || 'rapida');
-    }).catch(() => cajaTrans.replaceChildren(h('h2', {}, 'Velocidad de la transcripción'), h('p', { class: 'sub' }, 'No pude leer este ajuste.')));
+    }).catch(() => cajaTrans.replaceChildren(h('h2', {}, 'Velocidad de la transcripción'), h('p', { class: 'sub vivo' }, 'No pude leer este ajuste.')));
     return [
       cajaTrans,
       h('section', { class: 'card' }, h('h2', {}, 'Vocabulario propio'),
@@ -1583,7 +1584,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
           h('button', { type: 'button', class: 'btn ghost sm', disabled: (necesitaFinal && !S.p.tieneFinal) || S.p.corriendo, onclick: async () => { S.extrasHora = Date.now(); await lanzar('extra', { tipo, y, x: S.cropX ?? 0.5 }); } }, v[tipo] ? 'Volver a generar' : 'Generar'),
           v[tipo] ? h('a', { class: 'btn gold sm', href: `/api${A}/proyectos/${S.p.id}/extra/${tipo}?v=${S.extrasHora || 0}`, download: `${S.p.nombre}-${tipo === 'md' ? 'transcripcion' : tipo}.${tipo === 'srt' ? 'srt' : tipo === 'md' ? 'md' : 'mp4'}`, html: ic('descargar', 14) + ' Descargar' }) : null)));
     return h('section', { class: 'card' }, h('h2', {}, 'Otros formatos y subtítulos'),
-      h('p', { class: 'sub' }, `El video final es ${(plan().formato || '9x16').replace('x', ':')}. Aquí sacas las otras proporciones y el archivo de subtítulos .srt, ya con tus cortes aplicados. Si cambia la proporción, se recorta.`),
+      h('p', { class: 'sub vivo' }, `El video final es ${(plan().formato || '9x16').replace('x', ':')}. Aquí sacas las otras proporciones y el archivo de subtítulos .srt, ya con tus cortes aplicados. Si cambia la proporción, se recorta.`),
       fila('srt', 'Subtítulos .srt', 'Texto normal, con los silencios cortados. Sirve para YouTube, LinkedIn o Facebook.', false),
       fila('md', 'Transcripción .md para Hyperframes', 'Frases y cada palabra con su segundo exacto en el video final, ya con los cortes. Sirve para animar al ritmo de la voz.', false),
       slider('Qué parte conservar: arriba o abajo', 0, 1, 0.01, y, (x) => (x < 0.3 ? 'Más de arriba' : x > 0.6 ? 'Más de abajo' : 'Centrado'), (x) => { S.cropY = x; }, 0.45),
@@ -1600,7 +1601,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     c.manual = c.manual || []; c.ignorar = c.ignorar || [];
     const cont = h('div', { class: 'panel-in' });
     if (!S.env) {
-      cont.append(h('section', { class: 'card' }, h('p', { class: 'sub' }, 'Leyendo el audio de tu video...')));
+      cont.append(h('section', { class: 'card' }, h('p', { class: 'sub vivo' }, 'Leyendo el audio de tu video...')));
       api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (enRecorte()) pintarPanel(); }).catch((e) => toast(e.message));
       return [cont];
     }
@@ -2019,7 +2020,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
   function cardElegirGrandes() {
     const caja = h('section', { class: 'card' }, h('h2', {}, 'Elegir palabras grandes'));
     const pal = S.p.palabras || [];
-    if (!pal.length) { caja.append(h('p', { class: 'sub' }, 'Todavía no hay transcripción. Cuando termine de analizar el video, aquí eliges las palabras que van en grande.')); return caja; }
+    if (!pal.length) { caja.append(h('p', { class: 'sub vivo' }, 'Todavía no hay transcripción. Cuando termine de analizar el video, aquí eliges las palabras que van en grande.')); return caja; }
     let sel = new Set(), base = new Set(), ancla = -1, arrastra = false, movido = false;
     const rango = (a, b) => { const r = []; for (let q = Math.min(a, b); q <= Math.max(a, b); q++) r.push(q); return r; };
     const cont = h('div', { class: 'kar kar-grandes', tabindex: '0', 'aria-label': 'Transcripción. Selecciona palabras y pulsa Intro para ponerlas en grande.' });
@@ -2651,7 +2652,7 @@ Lo que necesito de ti:
       const clara = L.luz.arriba > 0.5;
       const rec = [...ACENTOS, '#181818'].map((c) => [c, contraste(c, L.color)]).sort((a, b) => b[1] - a[1])[0];
       cont.push(h('section', { class: 'card' }, h('h2', {}, 'Contraste con tu fondo'),
-        h('p', { class: 'sub' }, `Luz medida detrás de ti: arriba ${Math.round(L.luz.arriba * 100)}%, centro ${Math.round(L.luz.centro * 100)}%, abajo ${Math.round(L.luz.abajo * 100)}%. ${clara ? 'El fondo de arriba es claro y los textos claros se pierden.' : 'El fondo es oscuro, los textos claros se leen bien.'}`),
+        h('p', { class: 'sub vivo' }, `Luz medida detrás de ti: arriba ${Math.round(L.luz.arriba * 100)}%, centro ${Math.round(L.luz.centro * 100)}%, abajo ${Math.round(L.luz.abajo * 100)}%. ${clara ? 'El fondo de arriba es claro y los textos claros se pierden.' : 'El fondo es oscuro, los textos claros se leen bien.'}`),
         h('div', { class: 'row-gap' },
           clara ? h('button', { type: 'button', class: 'btn gold', onclick: () => { estilo().imagen.degradado = Math.max(estilo().imagen.degradado, 0.6); refrescar(); toast('Activé un degradado a negro arriba y abajo.'); } }, 'Activar degradado a negro') : null,
           rec[0].toLowerCase() !== st.accent.toLowerCase() ? h('button', { type: 'button', class: 'btn ghost', onclick: () => { st.accent = rec[0]; refrescar(); toast('Cambié el color de acento.'); } }, `Usar el acento ${rec[0]} (contraste ${rec[1].toFixed(1)}:1)`) : h('span', { class: 'hint' }, `Tu acento actual ya es el de mejor contraste (${rec[1].toFixed(1)}:1).`))));
@@ -2846,7 +2847,7 @@ Lo que necesito de ti:
       const mostrar = S.verTodasSug ? sug : sug.slice(0, 6);
       const nuevo = h('div', {}, h('h2', {}, 'Limpieza sugerida'),
         sug.length ? [
-          h('p', { class: 'sub' }, `Encontré ${sug.length} ${sug.length === 1 ? 'cosa' : 'cosas'} que probablemente quieras quitar. Escucha cada una y decide. Lo que quites se corta del video y se puede devolver.`),
+          h('p', { class: 'sub vivo' }, `Encontré ${sug.length} ${sug.length === 1 ? 'cosa' : 'cosas'} que probablemente quieras quitar. Escucha cada una y decide. Lo que quites se corta del video y se puede devolver.`),
           h('div', { class: 'row-gap' }, grupos.map(([t, l]) => h('button', { type: 'button', class: 'btn ghost sm', onclick: () => quitar(l) }, `Quitar ${l.length > 1 ? 'todas' : 'la'} ${TIPO_LIMPIEZA[t][0].toLowerCase()}${l.length > 1 ? 's' : ''} (${l.length})`))),
           h('ul', { class: 'evs lim' }, mostrar.map((s) => h('li', { class: 'ev lim-i' },
             h('div', { class: 'lim-t' }, h('span', { class: 'lim-tag t-' + s.tipo }, TIPO_LIMPIEZA[s.tipo][0]), h('span', { class: 'lim-s' }, MMSS(s.t0))),

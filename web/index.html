@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Estudio Marketographer</title>
+  <link rel="icon" href="/favicon.png">
   <link rel="stylesheet" href="/shell.css">
   <script>try{var e=parseFloat(localStorage.getItem("estudio.escala"));document.documentElement.style.setProperty("--esc",e>=0.7&&e<=1.3?e:0.9)}catch(x){}</script>
 </head>
@@ -11,7 +12,7 @@
   <a class="skip" href="#main">Saltar al contenido</a>
   <div class="app">
     <nav class="side" aria-label="Módulos">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span>Estudio</span></div>
+      <div class="brand"><img class="brand-mark" src="/logo.svg" alt="" width="32" height="32"><span>Estudio</span></div>
       <ul id="nav"></ul>
       <div class="escala" hidden role="group" aria-label="Tamaño de la interfaz">
         <button type="button" id="esc-menos" aria-label="Hacer la interfaz más pequeña" title="Más pequeño">A-</button>
@@ -20,7 +21,6 @@
         <button type="button" id="esc-reset" aria-label="Volver al tamaño normal" title="Tamaño normal">Reset</button>
       </div>
       <button type="button" id="resp-btn" class="resp-btn" hidden title="Copias de tus guiones, temas y clases">Copias de seguridad</button>
-      <p class="side-foot">Cada herramienta es un módulo. Los nuevos aparecen aquí solos.</p>
     </nav>
     <main id="main" tabindex="-1"></main>
   </div>
