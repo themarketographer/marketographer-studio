@@ -1795,8 +1795,18 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     // Quitar o devolver un corte no cambia la onda: no se vuelve a dibujar (era lo que hacía lento el clic).
     const pintarCambio = () => { pintarCortes(); pintarPalabras(); pintarResumen(); pintarDetalle(); pintarTiles(); };
     S.pausasRepinta = () => { if (!cont.isConnected) return; recalcular(); pintarTodo(); };
-    const poner = (z) => { zoom = Math.max(1, Math.min(40, z)); S.zoomCortes = zoom; const t = video ? video.currentTime : 0; pintarTodo(); scroller.scrollLeft = (t / dur) * tl.clientWidth - scroller.clientWidth / 2; };
-    scroller.addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); poner(zoom * (e.deltaY < 0 ? 1.25 : 0.8)); }, { passive: false });
+    const poner = (z, ancla) => { zoom = Math.max(1, Math.min(40, z)); S.zoomCortes = zoom; const t = video ? video.currentTime : 0; pintarTodo(); scroller.scrollLeft = ancla ? ancla.frac * tl.clientWidth - ancla.px : (t / dur) * tl.clientWidth - scroller.clientWidth / 2; };
+    // Pellizco del trackpad: un solo cambio por cuadro, proporcional a lo que mueves los dedos, y el zoom se ancla donde está el cursor.
+    let fz = 1, exz = 0, rafZ = 0;
+    scroller.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault();
+      fz *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.004)); exz = e.clientX;
+      if (!rafZ) rafZ = requestAnimationFrame(() => {
+        rafZ = 0; const f = fz; fz = 1; if (Math.abs(f - 1) < 0.002) return;
+        const r = tl.getBoundingClientRect(), sr = scroller.getBoundingClientRect(), k = sr.width / (scroller.offsetWidth || 1) || 1;
+        poner(zoom * f, { frac: (exz - r.left) / r.width, px: (exz - sr.left) / k });
+      });
+    }, { passive: false });
     const paso = (label, key, step, min, max, nota) => h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, label),
       h('div', { class: 'stepper' },
         h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `Menos ${label}`, onclick: async () => { c[key] = +Math.max(min, (c[key] ?? 0) - step).toFixed(3); await recalcularCortes(); cambio(); pintarPanel(); } }, '−'),

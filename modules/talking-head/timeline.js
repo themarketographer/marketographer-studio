@@ -135,7 +135,13 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   raf = requestAnimationFrame(bucle);
   let pend = 0;
   scroll.addEventListener('scroll', () => { if (pend) return; pend = requestAnimationFrame(() => { pend = 0; pintarOnda(); if (hoyPalabras()) pintar(); }); });
-  scroll.addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, (e.clientX - scroll.getBoundingClientRect().left) / zk() + scroll.scrollLeft); }, { passive: false });
+  // Pellizco del trackpad: llegan ~60 eventos por segundo. Se juntan en uno por cuadro y el factor sigue lo que mueves los dedos.
+  let fz = 1, cxz = 0, rafZ = 0;
+  scroll.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault();
+    fz *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.004)); cxz = (e.clientX - scroll.getBoundingClientRect().left) / zk() + scroll.scrollLeft;
+    if (!rafZ) rafZ = requestAnimationFrame(() => { rafZ = 0; const f = fz; fz = 1; if (Math.abs(f - 1) > 0.002) zoom(f, cxz); });
+  }, { passive: false });
   const ro = new ResizeObserver(() => { if (ajustar) pintar(); });
   ro.observe(scroll);
 
