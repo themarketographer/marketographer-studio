@@ -158,6 +158,7 @@ function alinear(viejas, texto) {
 
 // ---------- íconos y ajustes guardados en el navegador ----------
 const ICN = {
+  filtros: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
   doc: 'M6 4h9l3 3v13H6zM9 11h6M9 15h6', cortes: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM8.1 7.9L20 20M8.1 16.1L20 4',
   audio: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2', letras: 'M5 19L12 5l7 14M8 14h8', titulos: 'M4 6h16M12 6v13M8 19h8', subs: 'M4 7h16v10H4zM7 12h4M13 12h4',
   camara: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', formato: 'M3 6h18v12H3zM8 10h8v4H8z', look: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 3v18', elementos: 'M12 5v14M5 12h14', capas: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5', cierre: 'M4 6h16v12H4zM9 10l6 2-6 2z',
@@ -178,6 +179,7 @@ const ICN = {
 const ic = (n, sz = 18) => (ICN[n] ? `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICN[n]}"/></svg>` : '');
 // Cada etiqueta recibe el ícono que mejor dice qué está modificando.
 const ICONO_DE = [
+  [/filtro/, 'filtros'],
   [/silenc|umbral|margen|corte|recort/, 'cortes'], [/tipograf|fuente|letra/, 'letras'], [/mayuscul|minuscul/, 'caso'], [/interletr/, 'tracking'], [/contorno/, 'contorno'],
   [/brillo|glow|luces|luz/, 'sol'], [/tamano|size|escala/, 'tamano'], [/altura|posicion|desde arriba/, 'vertical'], [/color|acento|colores/, 'paleta'], [/zoom|intensidad|frecuencia|estilo del mov/, 'zoom'],
   [/lent|velocidad/, 'lento'], [/musica/, 'musica'], [/voz|microfono|ruido|graves/, 'mic'], [/volumen|sonido|efecto|sfx/, 'volumen'], [/desenfoque|difumin|blur/, 'gota'], [/grano/, 'grano'],
@@ -1664,7 +1666,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       if (r.tipo === 'manual') { c.manual.splice(r.i, 1); sel = null; S.corteSel = null; }
       else if (ignorado(r)) c.ignorar = c.ignorar.filter(([a, b]) => !(mid(r) >= a && mid(r) <= b));
       else c.ignorar.push([r.o[0], r.o[1]]);
-      recalcular(); cambio(); pintarTodo();
+      recalcular(); cambio(); pintarCambio();
     };
     // Mover un borde de una pausa automática la convierte en un corte tuyo: la pausa original queda conservada.
     const aManual = (r) => {
@@ -1706,7 +1708,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     };
     const pintarDetalle = () => {
       const r = todos.find((x) => idDe(x) === sel);
-      if (!r) return detalle.replaceChildren(h('p', { class: 'tl-ayuda' }, h('b', {}, 'Cómo se usa: '), 'arrastra sobre un espacio vacío para cortar ahí, aunque sea en medio de una frase. Arrastra el borde de una zona roja para ajustarla, o por dentro para moverla entera. Doble clic la conserva o la quita. Con Cmd y la rueda haces zoom para cortes muy cortos.'));
+      if (!r) return detalle.replaceChildren(h('p', { class: 'tl-ayuda' }, h('b', {}, 'Cómo se usa: '), 'arrastra sobre un espacio vacío para cortar ahí, aunque sea en medio de una frase. Arrastra el borde de una zona roja para ajustarla, o por dentro para moverla entera. Un clic la conserva o la quita. Con Cmd y la rueda haces zoom para cortes muy cortos.'));
       const off = ignorado(r), nudge = (lado, d) => { const t = (lado === 'l' ? r.s : r.e) + d; const nr = mover(r, lado, t); sel = idDe(nr); S.corteSel = sel; cambio(); pintarTodo(); };
       const btn = (txt, ico, fn, cls = 'ghost') => h('button', { type: 'button', class: `btn ${cls} sm`, onclick: fn, html: ic(ico, 14) + ` ${txt}` });
       const par = (txt, lado) => h('div', { class: 'ajuste-f' }, h('span', { class: 'lbl' }, txt), h('div', { class: 'row-gap' },
@@ -1747,7 +1749,6 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       const g = golpe(e.clientX);
       tl.style.cursor = g.tipo === 'borde' ? 'ew-resize' : g.tipo === 'cuerpo' ? (g.cu.tipo === 'texto' ? 'pointer' : 'grab') : 'crosshair';
     });
-    tl.addEventListener('dblclick', (e) => { const g = golpe(e.clientX); if (g.tipo !== 'vacio') alternar(g.cu); });
     tl.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !e.isPrimary) return;
       e.preventDefault();
@@ -1782,14 +1783,17 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
           if (movido && Math.abs(t1 - t0) >= 0.05) {
             c.manual.push([+Math.min(t0, t1).toFixed(3), +Math.max(t0, t1).toFixed(3)]);
             if (!c.on) { c.on = true; c.modo = 'palabras'; Object.assign(c, PRESETS_PAUSA[1][3]); }
-            recalcular(); sel = `m${c.manual.length - 1}`; S.corteSel = sel; cambio(); pintarTodo();
+            recalcular(); sel = `m${c.manual.length - 1}`; S.corteSel = sel; cambio(); pintarCambio();
           } else { sel = null; S.corteSel = null; saltar(pal ? Number(pal.dataset.t) : t0); pintarCortes(); pintarDetalle(); }
-        } else if (movido) { cambio(); pintarTodo(); }
+        } else if (movido) { cambio(); pintarCambio(); }
+        else if (g.tipo === 'cuerpo' && g.cu.tipo !== 'texto') alternar(g.cu);  // un solo clic quita o devuelve el corte, sin esperar al doble clic
         else saltar(t0);
       };
       tl.onpointerup = fin; tl.onpointercancel = fin;
     });
-    const pintarTodo = () => { dibujarOnda(); pintarCortes(); pintarPalabras(); pintarResumen(); pintarDetalle(); pintarTiles(); };
+    const pintarTodo = () => { dibujarOnda(); pintarCambio(); };
+    // Quitar o devolver un corte no cambia la onda: no se vuelve a dibujar (era lo que hacía lento el clic).
+    const pintarCambio = () => { pintarCortes(); pintarPalabras(); pintarResumen(); pintarDetalle(); pintarTiles(); };
     S.pausasRepinta = () => { if (!cont.isConnected) return; recalcular(); pintarTodo(); };
     const poner = (z) => { zoom = Math.max(1, Math.min(40, z)); S.zoomCortes = zoom; const t = video ? video.currentTime : 0; pintarTodo(); scroller.scrollLeft = (t / dur) * tl.clientWidth - scroller.clientWidth / 2; };
     scroller.addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); poner(zoom * (e.deltaY < 0 ? 1.25 : 0.8)); }, { passive: false });
