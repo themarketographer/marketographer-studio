@@ -1,9 +1,15 @@
 // Interfaz de Pro vs Noob: subes las dos tomas, eliges etiquetas y ves el resultado en vivo mientras ajustas.
 const ANIMS = [['pop', 'Pop'], ['deslizar', 'Desliza'], ['caer', 'Cae'], ['zoom', 'Zoom'], ['rebote', 'Rebota'], ['resorte', 'Resorte'], ['desenfoque', 'Enfoca'], ['escribir', 'Escribe']];
 const A = '/pro-vs-noob';
+const LS_PERFILES = 'estudio.pvn.perfiles', LS_DEFECTO = 'estudio.pvn.defecto';
+const leer = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
+const escribir = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin memoria */ } };
+const svg = (d, z = 20) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="currentColor" aria-hidden="true">${d}</svg>`;
+const D = { play: '<path d="M7 4l13 8-13 8z"/>', pausa: '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>', parar: '<rect x="6" y="6" width="12" height="12" rx="2"/>', inicio: '<path d="M6 5h2v14H6zM20 5v14L9 12z"/>' };
+const trazo = (d, z = 16) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 
 export async function mount(root, { api, toast, h, icon }) {
-  const S = { p: null, poll: 0 };
+  const S = { p: null, poll: 0, tab: 'tomas' };
   const seg = (label, opts, val, on) => h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, label),
     h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label }, opts.map(([v, l]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === val), class: 'seg-b' + (v === val ? ' on' : ''), onclick: () => on(v) }, l))));
   const subir = (id, lado, file) => new Promise((ok, no) => {
@@ -14,17 +20,31 @@ export async function mount(root, { api, toast, h, icon }) {
     xhr.onerror = () => no(new Error('No pude subir el video.'));
     xhr.send(file);
   });
+  // Borrar pide un segundo clic en el mismo botón (sin ventanas del sistema).
+  const dobleClic = (btn, fn) => btn.addEventListener('click', () => {
+    if (!btn.classList.contains('seguro')) { btn.classList.add('seguro'); const t = btn.textContent; btn.textContent = '¿Seguro?'; setTimeout(() => { btn.classList.remove('seguro'); btn.textContent = t; }, 2500); return; }
+    fn();
+  });
 
   async function inicio() {
     clearInterval(S.poll); S.p = null;
     const lista = await api(`${A}/proyectos`).catch(() => []);
+    const nuevo = h('button', { type: 'button', class: 'btn gold', onclick: async () => {
+      const p = await api(`${A}/proyectos`, { method: 'POST', body: { nombre: 'Pro vs Noob ' + new Date().toLocaleDateString('es') } });
+      const def = leer(LS_PERFILES, []).find((x) => x.id === leer(LS_DEFECTO, null));  // el perfil marcado como predeterminado se aplica a los proyectos nuevos
+      if (def) await api(`${A}/proyectos/${p.id}/config`, { method: 'PUT', body: { ...p.config, ...def.config } }).catch(() => {});
+      abrir(p.id);
+    }, html: icon('plus') + ' Nuevo Pro vs Noob' });
     root.replaceChildren(
-      h('div', { class: 'page-head' }, h('h1', {}, 'Pro vs Noob'), h('p', {}, 'Pon dos tomas en la misma pantalla: cómo lo hace quien empieza y cómo lo hace quien sabe. Cada una lleva su etiqueta animada.')),
-      h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn gold', onclick: async () => { const p = await api(`${A}/proyectos`, { method: 'POST', body: { nombre: 'Pro vs Noob ' + new Date().toLocaleDateString('es') } }); abrir(p.id); }, html: icon('plus') + ' Nuevo Pro vs Noob' })),
-      lista.length ? h('div', { class: 'pvn-lista' }, lista.map((p) => h('div', { class: 'card pvn-item' },
-        h('div', {}, h('strong', {}, p.nombre), h('small', {}, p.tieneFinal ? 'Listo para descargar' : p.tieneA && p.tieneB ? 'Con las dos tomas' : 'Faltan tomas')),
-        h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => abrir(p.id) }, 'Abrir'),
-          h('button', { type: 'button', class: 'btn danger sm', onclick: async () => { if (confirm(`Borrar "${p.nombre}"?`)) { await api(`${A}/proyectos/${p.id}`, { method: 'DELETE' }); inicio(); } } }, 'Borrar'))))) : h('p', { class: 'hint' }, 'Todavía no tienes ninguno.'));
+      h('div', { class: 'page-head' }, h('h1', {}, 'Pro vs Noob')),
+      h('div', { class: 'row-gap' }, nuevo),
+      lista.length ? h('div', { class: 'pvn-lista' }, lista.map((p) => {
+        const borrar = h('button', { type: 'button', class: 'btn danger sm' }, 'Borrar');
+        dobleClic(borrar, async () => { await api(`${A}/proyectos/${p.id}`, { method: 'DELETE' }); inicio(); });
+        return h('div', { class: 'card pvn-item' },
+          h('div', {}, h('strong', {}, p.nombre), h('small', {}, p.tieneFinal ? 'Listo para descargar' : p.tieneA && p.tieneB ? 'Con las dos tomas' : 'Faltan tomas')),
+          h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => abrir(p.id) }, 'Abrir'), borrar));
+      })) : null);
     window.estudioEntrada && window.estudioEntrada(root);
   }
 
@@ -62,12 +82,46 @@ export async function mount(root, { api, toast, h, icon }) {
       c.vs ? h('div', { class: 'pvn-vs' }, 'VS') : null,
       c.titulo ? h('div', { class: 'pvn-tit' }, c.titulo) : null);
     const reiniciar = () => { pantalla.querySelectorAll('.pvn-et, .pvn-vs, .pvn-tit').forEach((e) => { e.style.animation = 'none'; void e.offsetWidth; e.style.animation = ''; }); };
-    const alternar = () => {
-      if (va.paused) { va.currentTime = 0; vb.currentTime = 0; reiniciar(); Promise.all([va.play(), vb.play()]).catch(() => {}); } else { va.pause(); vb.pause(); }
-    };
+    const empezar = () => { va.currentTime = 0; vb.currentTime = 0; reiniciar(); return Promise.all([va.play(), vb.play()]).catch(() => {}); };
+    const alternar = () => { if (va.paused) { if (va.currentTime < 0.05 || va.ended) return empezar(); return Promise.all([va.play(), vb.play()]).catch(() => {}); } va.pause(); vb.pause(); };
+    const parar = () => { va.pause(); vb.pause(); va.currentTime = 0; vb.currentTime = 0; reiniciar(); };
     // La toma B sigue a la A para que no se desfasen.
     va.addEventListener('timeupdate', () => { if (!vb.paused && Math.abs(vb.currentTime - va.currentTime) > 0.3) vb.currentTime = va.currentTime; });
-    return { el: h('div', { class: 'phone' }, pantalla), alternar, reiniciar };
+    const phone = h('div', { class: 'phone', title: 'Clic para reproducir o pausar', onclick: alternar }, pantalla);
+    return { el: phone, alternar, parar, reiniciar, va, vb };
+  }
+
+  // ---------- perfiles: todo lo que se configura, guardado con nombre y aplicado en un clic ----------
+  function botonPerfiles() {
+    const lista = h('div', { class: 'pop pop-abajo', hidden: true, role: 'dialog', 'aria-label': 'Perfiles' });
+    const nombre = h('input', { type: 'text', class: 'perfil-nombre', placeholder: 'Nombre del perfil', 'aria-label': 'Nombre del perfil', autocomplete: 'off' });
+    const pintarLista = () => {
+      const ps = leer(LS_PERFILES, []), def = leer(LS_DEFECTO, null);
+      lista.replaceChildren(
+        h('p', { class: 'pop-sec' }, 'Perfiles'),
+        ...(ps.length ? ps.map((e) => {
+          const borrar = h('button', { type: 'button', class: 'perfil-ic borrar', title: 'Borrar perfil (doble clic)', html: trazo('<path d="M6 6l12 12M18 6L6 18"/>') });
+          dobleClic(borrar, () => { escribir(LS_PERFILES, ps.filter((x) => x.id !== e.id)); if (def === e.id) escribir(LS_DEFECTO, null); pintarLista(); });
+          return h('div', { class: 'perfil-fila' },
+            h('button', { type: 'button', class: 'perfil-usar', title: 'Aplicar a este proyecto', onclick: async () => { cerrar(); Object.assign(cfg(), JSON.parse(JSON.stringify(e.config))); guardar(); pintar(); toast(`Perfil «${e.nombre}» aplicado`); } },
+              h('span', { class: 'pvn-punto', style: `background:${e.config.a.color}` }), h('span', { class: 'pvn-punto', style: `background:${e.config.b.color}` }), h('strong', {}, e.nombre)),
+            h('button', { type: 'button', class: 'perfil-ic' + (def === e.id ? ' on' : ''), title: def === e.id ? 'Se usa en proyectos nuevos (clic para quitar)' : 'Usar en proyectos nuevos', 'aria-pressed': String(def === e.id), onclick: () => { escribir(LS_DEFECTO, def === e.id ? null : e.id); pintarLista(); }, html: trazo('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>') }),
+            h('button', { type: 'button', class: 'perfil-ic', title: 'Actualizar con lo que tienes ahora', onclick: () => { e.config = JSON.parse(JSON.stringify(cfg())); escribir(LS_PERFILES, ps); toast(`«${e.nombre}» actualizado`); }, html: trazo('<path d="M5 4h12l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/>') }),
+            borrar);
+        }) : [h('p', { class: 'pop-vacio' }, 'Sin perfiles')]),
+        h('hr', { class: 'pop-sep' }),
+        h('div', { class: 'perfil-nuevo' }, nombre, h('button', { type: 'button', class: 'btn gold sm', onclick: () => {
+          const n = nombre.value.trim(); if (!n) { nombre.focus(); return; }
+          escribir(LS_PERFILES, [...leer(LS_PERFILES, []), { id: 'p' + Date.now().toString(36), nombre: n, config: JSON.parse(JSON.stringify(cfg())) }]); nombre.value = ''; pintarLista(); toast(`Perfil «${n}» guardado`);
+        } }, 'Guardar lo actual')));
+    };
+    nombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lista.querySelector('.perfil-nuevo .btn')?.click(); } });
+    const cerrar = () => { lista.hidden = true; document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+    const fuera = (e) => { if (!wrap.contains(e.target)) cerrar(); }; const esc = (e) => { if (e.key === 'Escape') cerrar(); };
+    const b = h('button', { type: 'button', class: 'btn ghost sm', title: 'Perfiles: guardar y aplicar toda la configuración', 'aria-label': 'Perfiles', 'aria-haspopup': 'dialog', html: trazo('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', 18),
+      onclick: () => { if (lista.hidden) { pintarLista(); lista.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
+    const wrap = h('div', { class: 'pop-wrap' }, b, lista);
+    return wrap;
   }
 
   function pintar() {
@@ -75,37 +129,68 @@ export async function mount(root, { api, toast, h, icon }) {
     const caja = (lado, nombre) => {
       const input = h('input', { type: 'file', accept: 'video/*,.mp4,.mov,.m4v', hidden: true, onchange: async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; toast('Subiendo la toma...'); try { await subir(p.id, lado, f); const r = await api(`${A}/proyectos/${p.id}`); S.p = { ...r, ver: Date.now() }; pintar(); } catch (er) { toast(er.message); } } });
       const tiene = lado === 'a' ? p.tieneA : p.tieneB;
-      return h('div', { class: 'pvn-toma' + (tiene ? ' ok' : '') }, h('strong', {}, `Toma de ${nombre}`),
-        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => input.click() }, tiene ? 'Cambiar video' : 'Subir video'), input);
+      const el = h('button', { type: 'button', class: 'pvn-toma' + (tiene ? ' ok' : ''), onclick: () => input.click() },
+        h('strong', {}, nombre), h('span', {}, tiene ? 'Cambiar video' : 'Subir video'), input);
+      // arrastrar un archivo sobre la toma también sirve
+      el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('sobre'); });
+      el.addEventListener('dragleave', () => el.classList.remove('sobre'));
+      el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('sobre'); const f = e.dataTransfer.files[0]; if (f) { const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; input.dispatchEvent(new Event('change')); } });
+      return el;
     };
     const v = vista();
-    const cambiar = (fn, anim) => { fn(); guardar(); pintar(); };
+    const cambiar = (fn) => { fn(); guardar(); pintar(); };
     const color = (label, val, on) => h('label', { class: 'pvn-col' }, h('span', { class: 'lbl' }, label), h('input', { type: 'color', value: val, oninput: (e) => { on(e.target.value); guardar(); } }));
-    const ctrl = h('div', { class: 'pvn-ctrl' },
-      h('section', { class: 'card' }, h('h2', {}, '1. Las dos tomas'), h('div', { class: 'pvn-tomas' }, caja('a', c.a.nombre || 'Noob'), caja('b', c.b.nombre || 'Pro')),
-        h('small', { class: 'hint' }, 'Funcionan mejor verticales. Si no lo son, se recortan desde el centro para llenar su mitad.')),
-      h('section', { class: 'card' }, h('h2', {}, '2. Cómo se ven'),
-        seg('Disposición', [['apilado', 'Una arriba y otra abajo'], ['lado', 'Lado a lado']], c.layout, (x) => cambiar(() => { c.layout = x; })),
+    const txt = (label, val, max, on, ph) => h('label', { class: 'ctl' }, h('span', { class: 'lbl' }, label), h('input', { value: val, maxlength: max, placeholder: ph || '', oninput: (e) => on(e.target.value) }));
+    const interruptor = (label, val, on) => h('button', { type: 'button', role: 'switch', 'aria-checked': String(val), class: 'sw-row', onclick: on }, h('span', { class: 'sw' + (val ? ' on' : ''), 'aria-hidden': 'true' }, h('i')), label);
+    // Tres grupos en pestañas: de dónde salen las tomas, cómo se rotulan y cómo suenan.
+    const PEST = {
+      tomas: () => [
+        h('div', { class: 'pvn-tomas' }, caja('a', c.a.nombre || 'Noob'), caja('b', c.b.nombre || 'Pro')),
+        seg('Disposición', [['apilado', 'Arriba y abajo'], ['lado', 'Lado a lado']], c.layout, (x) => cambiar(() => { c.layout = x; })),
+      ],
+      etiquetas: () => [
         h('div', { class: 'pvn-dos' },
-          h('label', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Etiqueta de la primera'), h('input', { value: c.a.nombre, maxlength: 14, oninput: (e) => { c.a.nombre = e.target.value; guardar(); v.el.querySelectorAll('.pvn-et b')[0].textContent = c.a.nombre; } })),
-          h('label', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Etiqueta de la segunda'), h('input', { value: c.b.nombre, maxlength: 14, oninput: (e) => { c.b.nombre = e.target.value; guardar(); v.el.querySelectorAll('.pvn-et b')[1].textContent = c.b.nombre; } }))),
-        h('div', { class: 'pvn-dos' }, color('Color de la primera', c.a.color, (x) => { c.a.color = x; v.el.querySelectorAll('.pvn-et')[0].style.setProperty('--col', x); }), color('Color de la segunda', c.b.color, (x) => { c.b.color = x; v.el.querySelectorAll('.pvn-et')[1].style.setProperty('--col', x); })),
-        seg('Animación de las etiquetas', ANIMS, c.anim, (x) => cambiar(() => { c.anim = x; })),
-        h('label', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Título abajo (opcional)'), h('input', { value: c.titulo, maxlength: 60, placeholder: 'Por ejemplo: el mismo retrato, dos luces', oninput: (e) => { c.titulo = e.target.value; guardar(); } , onchange: () => pintar() })),
-        h('button', { type: 'button', role: 'switch', 'aria-checked': String(c.vs), class: 'sw-row', onclick: () => cambiar(() => { c.vs = !c.vs; }) }, h('span', { class: 'sw' + (c.vs ? ' on' : ''), 'aria-hidden': 'true' }, h('i')), 'Insignia VS en el centro')),
-      h('section', { class: 'card' }, h('h2', {}, '3. Sonido y duración'),
-        seg('Qué audio suena', [['b', 'El de la segunda'], ['a', 'El de la primera'], ['mezcla', 'Las dos mezcladas']], c.audio, (x) => cambiar(() => { c.audio = x; })),
-        seg('Duración del video', [['min', 'La de la toma más corta'], ['a', 'La de la primera'], ['b', 'La de la segunda']], c.duracion, (x) => cambiar(() => { c.duracion = x; }))));
-    const estado = p.corriendo ? h('div', { class: 'card pvn-prog' }, h('strong', {}, 'Montando el video'), h('div', { class: 'bar' }, h('i', { style: `width:${p.status?.pct || 0}%` })), h('small', {}, 'Puedes dejar esta pantalla abierta.'))
+          txt('Primera', c.a.nombre, 14, (x) => { c.a.nombre = x; guardar(); v.el.querySelectorAll('.pvn-et b')[0].textContent = x; }),
+          txt('Segunda', c.b.nombre, 14, (x) => { c.b.nombre = x; guardar(); v.el.querySelectorAll('.pvn-et b')[1].textContent = x; })),
+        h('div', { class: 'pvn-dos' },
+          color('Color de la primera', c.a.color, (x) => { c.a.color = x; v.el.querySelectorAll('.pvn-et')[0].style.setProperty('--col', x); }),
+          color('Color de la segunda', c.b.color, (x) => { c.b.color = x; v.el.querySelectorAll('.pvn-et')[1].style.setProperty('--col', x); })),
+        seg('Animación', ANIMS, c.anim, (x) => cambiar(() => { c.anim = x; })),
+        txt('Título abajo', c.titulo, 60, (x) => { c.titulo = x; guardar(); }, 'Opcional'),
+        interruptor('Insignia VS', c.vs, () => cambiar(() => { c.vs = !c.vs; })),
+      ],
+      sonido: () => [
+        seg('Audio', [['b', 'Segunda'], ['a', 'Primera'], ['mezcla', 'Mezcla']], c.audio, (x) => cambiar(() => { c.audio = x; })),
+        seg('Duración', [['min', 'La más corta'], ['a', 'Primera'], ['b', 'Segunda']], c.duracion, (x) => cambiar(() => { c.duracion = x; })),
+      ],
+    };
+    const NOMBRES = [['tomas', 'Tomas'], ['etiquetas', 'Etiquetas'], ['sonido', 'Sonido']];
+    const tabs = h('div', { class: 'sec-tabs', role: 'tablist' }, NOMBRES.map(([id, n]) => h('button', { type: 'button', role: 'tab', class: 'sec-tab' + (S.tab === id ? ' on' : ''), 'aria-selected': String(S.tab === id), onclick: () => { S.tab = id; pintar(); } }, n)));
+    const ctrl = h('div', { class: 'pvn-ctrl' }, tabs, h('section', { class: 'card' }, ...PEST[S.tab]()));
+
+    const tr = (d, tit, fn, cls = '') => h('button', { type: 'button', class: 'pvn-tr ' + cls, title: tit, 'aria-label': tit, disabled: !listo, onclick: fn, html: svg(d) });
+    const bPlay = tr(D.play, 'Reproducir (espacio)', v.alternar, 'pvn-play');
+    const sync = () => { const suena = !v.va.paused; bPlay.innerHTML = svg(suena ? D.pausa : D.play); bPlay.title = suena ? 'Pausa (espacio)' : 'Reproducir (espacio)'; bPlay.classList.toggle('sonando', suena); };
+    v.va.addEventListener('play', sync); v.va.addEventListener('pause', sync);
+    S.alternar = listo ? v.alternar : null;
+    const transporte = h('div', { class: 'pvn-transporte', role: 'group', 'aria-label': 'Reproducción' }, tr(D.inicio, 'Desde el principio', () => { v.parar(); v.alternar(); }), bPlay, tr(D.parar, 'Parar', v.parar));
+
+    const estado = p.corriendo ? h('div', { class: 'card pvn-prog' }, h('strong', {}, 'Montando el video'), h('div', { class: 'bar' }, h('i', { style: `width:${p.status?.pct || 0}%` })))
       : h('div', { class: 'row-gap' },
-        h('button', { type: 'button', class: 'btn gold', disabled: !listo, onclick: async () => { try { await api(`${A}/proyectos/${p.id}/renderizar`, { method: 'POST' }); S.p.corriendo = true; pintar(); seguir(); } catch (e) { toast(e.message); } }, html: icon('check') + ' Exportar video 1080x1920' }),
-        p.tieneFinal ? h('a', { class: 'btn ghost', href: url('final'), download: `${p.nombre}.mp4` }, 'Descargar el último exportado') : null);
+        h('button', { type: 'button', class: 'btn gold', disabled: !listo, onclick: async () => { try { await api(`${A}/proyectos/${p.id}/renderizar`, { method: 'POST' }); S.p.corriendo = true; pintar(); seguir(); } catch (e) { toast(e.message); } }, html: icon('check') + ' Exportar 1080x1920' }),
+        p.tieneFinal ? h('a', { class: 'btn ghost', href: url('final'), download: `${p.nombre}.mp4` }, 'Descargar el último') : null);
     root.replaceChildren(
-      h('div', { class: 'row-between' }, h('h1', { class: 'pvn-h' }, p.nombre), h('button', { type: 'button', class: 'btn ghost sm', onclick: inicio }, 'Volver')),
+      h('div', { class: 'row-between' }, h('h1', { class: 'pvn-h' }, p.nombre), h('div', { class: 'row-gap' }, botonPerfiles(), h('button', { type: 'button', class: 'btn ghost sm', onclick: inicio }, 'Volver'))),
       h('div', { class: 'pvn-cols' },
-        h('div', { class: 'pvn-izq' }, v.el, h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn ghost', disabled: !listo, onclick: v.alternar }, 'Reproducir o pausar'), h('button', { type: 'button', class: 'btn ghost', onclick: v.reiniciar }, 'Ver la animación otra vez')), estado),
+        h('div', { class: 'pvn-izq' }, v.el, transporte, estado),
         ctrl));
     window.estudioEntrada && window.estudioEntrada(root);
   }
+  // Barra espaciadora: reproducir o pausar (salvo al escribir en un campo).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' || !root.isConnected || !S.alternar) return;
+    const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'BUTTON')) return;
+    e.preventDefault(); S.alternar();
+  });
   inicio();
 }

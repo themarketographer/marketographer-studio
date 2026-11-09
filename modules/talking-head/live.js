@@ -93,7 +93,8 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   const va = h('video', { src: alphaUrl, playsinline: true, muted: true, preload: 'auto', style: hid, 'aria-hidden': 'true' });
   va.muted = true;
   let antes = false, raf = 0, vivo = true, ultimo = -1, tieneAlpha = true, sucio = true, tDib = -1;
-  va.onerror = () => { tieneAlpha = false; };
+  let erroresAlpha = 0;
+  va.onerror = () => { erroresAlpha++; if (erroresAlpha > 3) { tieneAlpha = false; return; } setTimeout(() => { try { const t = vs.currentTime; va.load(); va.currentTime = t; if (!vs.paused) va.play().catch(() => {}); } catch { /* sin recarga */ } }, 400); };  // un corte de red momentáneo no apaga el recorte
 
   // ---------- texto ----------
   const fontOf = (file) => (file ? fam(file) : 'Poppins');
@@ -794,19 +795,19 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   }
 
   // ---------- recorte de la persona ----------
-  let matteT = -1, matteOk = false;
+  let matteT = -1, matteOk = false, matteValida = false;  // matteValida: ya hay una silueta guardada; mientras tanto el efecto no se apaga
   function actualizarMatte() {
     if (!tieneAlpha) { matteOk = false; return false; }
     // Si el video de la máscara se queda un instante atrás (se resincroniza), se sigue usando la última silueta:
     // así el halo y el desenfoque no parpadean ni desaparecen entre zooms.
-    if (va.readyState < 2) { matteOk = matteT >= 0; return matteOk; }
+    if (va.readyState < 2 || va.seeking) { matteOk = matteValida; return matteOk; }
     const key = va.currentTime;
     if (key !== matteT) {
       dibujarVideo(mkctx, va, maskSmall.width, maskSmall.height);
       const img = mkctx.getImageData(0, 0, maskSmall.width, maskSmall.height), px = img.data;
       for (let i = 0; i < px.length; i += 4) { px[i + 3] = px[i]; px[i] = 255; px[i + 1] = 255; px[i + 2] = 255; }
       mctx.putImageData(img, 0, 0);
-      matteT = key;
+      matteT = key; matteValida = true;
     }
     matteOk = true; return true;
   }
@@ -1037,7 +1038,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!P) return;
     const t = vs.currentTime;
     const c = P.cortes;
-    if (c && !vs.paused) { const quitar = (c.on ? c.rangos || [] : []).concat(c.borradas || []); for (const [a, b] of quitar) if (t >= a && t < b - 0.02) { vs.currentTime = b; break; } }
+    if (c && !vs.paused) { const quitar = (c.on ? c.rangos || [] : []).concat(c.borradas || []); for (const [a, b] of quitar) if (t >= a && t < b - 0.02) { vs.currentTime = b; if (tieneAlpha) va.currentTime = b; break; } }
     const l = (P.lentos || []).find((x) => t >= x.start && t < x.end);
     const rate = l ? 1 / (l.factor || 2) : 1;
     if (Math.abs(vs.playbackRate - rate) > 0.01) vs.playbackRate = rate;
@@ -1047,7 +1048,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     if (!vivo) return;
     if (!estatico) { reglas(); const PP = getPlan(); if (PP && PP.style) audioTick(PP); }
     if (!va.paused !== !vs.paused) { vs.paused ? va.pause() : va.play().catch(() => {}); }
-    if (tieneAlpha && Math.abs(va.currentTime - vs.currentTime) > (vs.paused ? 0.03 : 0.15)) va.currentTime = vs.currentTime;
+    if (tieneAlpha && !va.seeking && Math.abs(va.currentTime - vs.currentTime) > (vs.paused ? 0.03 : 0.2)) va.currentTime = vs.currentTime;
     if (va.playbackRate !== vs.playbackRate) va.playbackRate = vs.playbackRate;
     // solo se dibuja cuando algo cambió: el video avanza, se movió un ajuste o se arrastró un texto
     if (!vs.paused || sucio || vs.currentTime !== tDib) { sucio = false; tDib = vs.currentTime; dibujar(); }

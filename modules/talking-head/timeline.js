@@ -46,15 +46,15 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   const bPop = h('div', { class: 'pop-wrap' }, bOpc, pop);
   const ico = (d, z = 20, fill = true) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="${fill ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${fill ? 0 : 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const tb = (cls, d, tit, accion) => h('button', { type: 'button', class: 'lt-tr ' + cls, title: tit, 'aria-label': tit, onclick: () => { onTransporte(accion); setTimeout(estadoTransporte, 60); setTimeout(estadoTransporte, 400); }, html: ico(d) });
-  const estadoTransporte = () => { const v = getVideo(), sonando = !!(v && !v.paused); if (bPlay.disabled !== sonando) { bPlay.disabled = sonando; bPausa.disabled = !sonando; } };
+  let sonandoPrev = null;
+  const estadoTransporte = () => { const v = getVideo(), sonando = !!(v && !v.paused); if (sonando === sonandoPrev) return; sonandoPrev = sonando; bPlay.innerHTML = ico(sonando ? D_PAUSA : D_PLAY); bPlay.title = sonando ? 'Pausa (espacio)' : 'Reproducir (espacio)'; bPlay.setAttribute('aria-label', bPlay.title); bPlay.classList.toggle('sonando', sonando); };
+  const D_PLAY = '<path d="M7 4l13 8-13 8z"/>', D_PAUSA = '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>';
   const bInicio = tb('', '<path d="M6 5h2v14H6zM20 5v14L9 12z"/>', 'Ir al inicio', 'inicio');
-  const bAtras = tb('', '<path d="M12.5 6v12L4 12zM21 6v12l-8.5-6z"/>', 'Atrás 5 segundos', 'atras');
-  const bPlay = tb('lt-play', '<path d="M7 4l13 8-13 8z"/>', 'Reproducir (espacio)', 'play');
-  const bPausa = tb('lt-pausa', '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>', 'Pausa (espacio)', 'pausa');
-  const bParar = tb('', '<rect x="6" y="6" width="12" height="12" rx="2"/>', 'Parar y volver al inicio', 'parar');
-  const bAdelante = tb('', '<path d="M11.5 6v12L20 12zM3 6v12l8.5-6z"/>', 'Adelante 5 segundos', 'adelante');
-  bPausa.disabled = true;
-  const transporte = h('div', { class: 'lt-transporte', role: 'group', 'aria-label': 'Reproducción' }, bInicio, bAtras, bPlay, bPausa, bParar, bAdelante);
+  const bAtras = tb('', '<path d="M12.5 6v12L4 12zM21 6v12l-8.5-6z"/>', 'Atrás 5 s', 'atras');
+  const bPlay = tb('lt-play', D_PLAY, 'Reproducir (espacio)', 'alternar');  // un solo botón: cambia de icono según lo que hace
+  const bParar = tb('', '<rect x="6" y="6" width="12" height="12" rx="2"/>', 'Parar', 'parar');
+  const bAdelante = tb('', '<path d="M11.5 6v12L20 12zM3 6v12l8.5-6z"/>', 'Adelante 5 s', 'adelante');
+  const transporte = h('div', { class: 'lt-transporte', role: 'group', 'aria-label': 'Reproducción' }, bInicio, bAtras, bPlay, bParar, bAdelante);
   const lupa = (mas) => svg(`<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6${mas ? 'M11 8v6' : ''}"/>`, 22);
   const bIb = (html, tit, fn) => h('button', { type: 'button', class: 'lt-ib', title: tit, 'aria-label': tit, onclick: fn, html });
   // Zoom con barra: va de ver todo el video hasta el cuadro suelto (escala logarítmica).
@@ -65,8 +65,8 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   const chev = (arriba) => svg(arriba ? '<path d="M6 15l6-6 6 6"/>' : '<path d="M6 9l6 6 6-6"/>', 22);
   const bOcultar = h('button', { type: 'button', class: 'lt-ib lt-ocultar', title: 'Ocultar la línea de tiempo', 'aria-label': 'Ocultar o mostrar la línea de tiempo', onclick: () => onAlternarTL(), html: chev(false) });
   const barra = h('div', { class: 'lt-barra' },
-    h('div', { class: 'lt-izq' }, transporte, info),
-    h('div', { class: 'lt-centro' }, barraExtra, bPop, accion),
+    h('div', { class: 'lt-izq' }, info, barraExtra, bPop, accion),
+    h('div', { class: 'lt-centro' }, transporte),
     h('div', { class: 'lt-der' }, bIb(lupa(false), 'Alejar', () => zoom(0.7)), zoomSl, bIb(lupa(true), 'Acercar', () => zoom(1.4)), bIb(svg('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>', 22), 'Ver todo el video', () => { ajustar = true; pintar(); }), bOcultar));
   const etiquetas = h('div', { class: 'lt-etq' }, PISTAS.map(([, n, y, a]) => h('span', { style: `top:${y}px;height:${a}px` }, n)));
   const inner = h('div', { class: 'lt-inner' });
@@ -140,7 +140,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     inner.replaceChildren(...kids);
     pintarOnda(); pintarAccion(); cabeza(true); syncZoom();
   }
-  const hoyPalabras = () => pxs >= 80;
+  const hoyPalabras = () => false;  // las palabras sueltas sobre la onda eran diminutas y no se podían usar: se editan en Recortar y Corregir
   function pintarOnda() {
     const env = getEnv(), w = scroll.clientWidth, dpr = window.devicePixelRatio || 1, ah = 56;
     cv.width = w * dpr; cv.height = ah * dpr; cv.style.width = `${w}px`; cv.style.height = `${ah}px`; cv.style.left = `${scroll.scrollLeft}px`;
@@ -215,6 +215,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     const pts = iman ? puntosIman(ref) : [], tol = 8 / pxs;
     let a = a0, b = b0, movido = false;
     elegir({ tipo, ref });
+    inner.style.cursor = modo === 'mover' ? 'grabbing' : 'ew-resize'; document.body.style.cursor = inner.style.cursor;
     const nodo2 = inner.querySelector('.lt-b.sel') || nodo;
     nodo2.setPointerCapture?.(e.pointerId);
     const mover = (ev) => {
@@ -235,17 +236,19 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
       const er = el.getBoundingClientRect(); tooltip.style.left = `${(ev.clientX - er.left) / zk() + 10}px`; tooltip.style.top = `${(ev.clientY - er.top) / zk() - 28}px`;
     };
     const fin = () => {
-      removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); tooltip.hidden = true;
+      removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); tooltip.hidden = true; inner.style.cursor = ''; document.body.style.cursor = '';
       if (movido) { aplicar(ref, tipo, a, b); onCambio(); } else onIr(esZ ? ref.t : ref.start);
     };
     addEventListener('pointermove', mover); addEventListener('pointerup', fin);
   }
   function arrastrarRegla(e) {
+    inner.style.cursor = 'col-resize'; document.body.style.cursor = 'col-resize';
     const mover = (ev) => { tArrastre = tDe(ev.clientX); onIr(tArrastre); cabeza(true); }; mover(e);
-    const fin = () => { tArrastre = null; removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); };
+    const fin = () => { tArrastre = null; inner.style.cursor = ''; document.body.style.cursor = ''; removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); };
     addEventListener('pointermove', mover); addEventListener('pointerup', fin);
   }
   function arrastrarVoz(e) {
+    document.body.style.cursor = 'col-resize';
     const pts = iman ? puntosIman(null) : [], tol = 8 / pxs, t0 = tDe(e.clientX), x0 = e.clientX;
     const c = getPlan().cortes || {}, hit = (c.borradas || []).find(([a, b]) => t0 >= a && t0 <= b) || (c.on ? (c.rangos || []).find(([a, b]) => t0 >= a && t0 <= b) : null);
     let movido = false;
@@ -255,7 +258,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
       rango = [Math.min(sn(t0), sn(t1)), Math.max(sn(t0), sn(t1))]; sel = null; pintar();
     };
     const fin = () => {
-      removeEventListener('pointermove', mover); removeEventListener('pointerup', fin);
+      removeEventListener('pointermove', mover); removeEventListener('pointerup', fin); document.body.style.cursor = '';
       if (movido) { if (rango[1] - rango[0] < 0.05) rango = null; pintar(); return; }
       rango = null;
       if (hit) elegir({ tipo: (c.borradas || []).includes(hit) ? 'borrada' : 'pausa', ref: hit }); else { sel = null; pintar(); }
@@ -263,6 +266,17 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     };
     addEventListener('pointermove', mover); addEventListener('pointerup', fin);
   }
+  // Cursor por zona: borde de un bloque = flechas laterales, dentro = mano (se mueve), regla = flechas laterales (mueve la cabeza), vacío = flecha.
+  inner.addEventListener('pointermove', (e) => {
+    if (e.buttons) return;
+    const nodo = e.target.closest ? e.target.closest('.lt-b') : null;
+    if (nodo) {
+      const r = nodo.getBoundingClientRect(), zoom_ = nodo._tipo === 'zoom', borde = Math.min(6, r.width / 3);
+      inner.style.cursor = !zoom_ && (e.clientX - r.left < borde || r.right - e.clientX < borde) ? 'ew-resize' : 'grab';
+      return;
+    }
+    inner.style.cursor = e.clientY - inner.getBoundingClientRect().top < 22 * zk() ? 'col-resize' : 'default';
+  });
   inner.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return; el.focus({ preventScroll: true });
     const nodo = e.target.closest('.lt-b');

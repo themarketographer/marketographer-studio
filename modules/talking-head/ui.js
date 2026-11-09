@@ -159,6 +159,7 @@ function alinear(viejas, texto) {
 // ---------- íconos y ajustes guardados en el navegador ----------
 const ICN = {
   x: 'M6 6l12 12M18 6L6 18',
+  zoomMenos: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6',
   filtros: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
   doc: 'M6 4h9l3 3v13H6zM9 11h6M9 15h6', cortes: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM8.1 7.9L20 20M8.1 16.1L20 4',
   audio: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2', letras: 'M5 19L12 5l7 14M8 14h8', titulos: 'M4 6h16M12 6v13M8 19h8', subs: 'M4 7h16v10H4zM7 12h4M13 12h4',
@@ -634,7 +635,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (!p.plan.estiloAplicado) {
       p.plan.estiloAplicado = true;
       const base = (S.aj.estilos || []).find((x) => x.id === S.aj.estiloDefecto);
-      if (base) { const fuentesOk = (f) => !f || !S.fuentes.length || S.fuentes.includes(f); const e = structuredClone(base.style); if (!fuentesOk(e.font)) delete e.font; p.plan.style = fusionar(st, e); }
+      if (base) { const fuentesOk = (f) => !f || !S.fuentes.length || S.fuentes.includes(f); const e = structuredClone(base.style); if (!fuentesOk(e.font)) delete e.font; p.plan.style = fusionar(st, e); const x = base.extra; if (x) { if (x.audio) p.plan.audio = { ...p.plan.audio, ...structuredClone(x.audio) }; if (x.cierre) p.plan.cierre = { ...p.plan.cierre, ...structuredClone(x.cierre) }; if (x.filtros) p.plan.filtros = [...(p.plan.filtros || []), ...structuredClone(x.filtros)]; } }
     }
   }
   // Tiempo del video original convertido al tiempo del video con cortes (para saltar en la vista previa o el final).
@@ -752,7 +753,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     ed.append(dv, dh);
     ed._alternarTL = () => { D.h = (D.h ?? 999) > 70 ? 0 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); };
     // Ventanas laterales: se arrastra su borde para cambiar el ancho (doble clic = tamaño de siempre).
-    const AN = (() => { try { return { izq: 380, der: 420, ...JSON.parse(localStorage.getItem('estudio.anchos') || '{}') }; } catch { return { izq: 380, der: 420 }; } })();
+    const AN = (() => { try { return { izq: 520, der: 420, ...JSON.parse(localStorage.getItem('estudio.anchos') || '{}') }; } catch { return { izq: 520, der: 420 }; } })();
     const esc = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9;
     const poner = () => { ed.style.setProperty('--izq-user', `${AN.izq}px`); ed.style.setProperty('--der-user', `${AN.der}px`); };
     poner();
@@ -768,7 +769,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         el.addEventListener('pointermove', mover); el.addEventListener('pointerup', fin);
       });
       el.addEventListener('keydown', (e) => { const d = e.key === 'ArrowLeft' ? -20 : e.key === 'ArrowRight' ? 20 : 0; if (!d) return; e.preventDefault(); cambia(lado === 'izq' ? d : -d); guarda(); });
-      el.addEventListener('dblclick', () => { AN[lado] = lado === 'izq' ? 380 : 420; poner(); guarda(); });
+      el.addEventListener('dblclick', () => { AN[lado] = lado === 'izq' ? 520 : 420; poner(); guarda(); });
       return el;
     };
     ed.append(asa('izq'), asa('der'));
@@ -812,7 +813,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     S.anchoAncho = window.innerWidth >= 900;  // con qué diseño se pintó: si la ventana cruza los 900 px se vuelve a pintar
     const ed = h('div', { class: 'ed ' + (window.innerWidth >= 900 ? 'normal' : (S.vista || 'normal')) + (window.innerWidth >= 900 && panelCerrado() ? ' panel-cerrado' : '') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
     ed.dataset.paso = S.paso; ed.dataset.prio = prioridadDiseno();
-    if (ed.classList.contains('ws')) { titulo.className = 'cab-titulo'; cab.insertBefore(titulo, cab.children[1]); cab.insertBefore(buscadorHerramientas(), cab.lastElementChild); cab.insertBefore(botonDiseno(), cab.lastElementChild); root.replaceChildren(cab, ed); espacioDeTrabajo(ed); }
+    if (ed.classList.contains('ws')) { titulo.className = 'cab-titulo'; cab.insertBefore(titulo, cab.children[1]); cab.insertBefore(buscadorHerramientas(), cab.lastElementChild); cab.insertBefore(botonPerfiles(), cab.lastElementChild); cab.insertBefore(botonDiseno(), cab.lastElementChild); root.replaceChildren(cab, ed); espacioDeTrabajo(ed); }
     else root.replaceChildren(cab, titulo, ed);
     decorar(root);
     if (S.panel) montarHoja();
@@ -926,7 +927,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', sz) }),
       h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', sz) }));
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, barraExtra: conBarraTL ? grupoUndo(22) : null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onAlternar: () => { if (live) live.alternar(); }, onTransporte: (a) => { if (!live) return; ({ inicio: () => live.ir(0), atras: () => live.saltar(-5), adelante: () => live.saltar(5), play: () => live.reproducir(), pausa: () => live.pausar(), parar: () => live.parar() })[a]?.(); }, onAlternarTL: () => document.querySelector('.ed.ws')?._alternarTL?.(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, barraExtra: conBarraTL ? grupoUndo(22) : null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onAlternar: () => { if (live) live.alternar(); }, onTransporte: (a) => { if (!live) return; ({ inicio: () => live.ir(0), atras: () => live.saltar(-5), adelante: () => live.saltar(5), alternar: () => live.alternar(), parar: () => live.parar() })[a]?.(); }, onAlternarTL: () => document.querySelector('.ed.ws')?._alternarTL?.(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = h('div', { class: 'pantalla-y-medidor' }, phone, medidor ? medidor.el : null);
@@ -946,7 +947,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
           h('button', { type: 'button', class: 'ib' + (S.vista === 'solo' ? ' on' : ''), title: 'Ocultar los ajustes y ver solo el video', 'aria-label': 'Ocultar los ajustes', 'aria-pressed': String(S.vista === 'solo'), onclick: () => cambiarVista(S.vista === 'solo' ? 'normal' : 'solo'), html: ic('ojo', 16) })))),
       pantallaYMedidor,
       lineaEl,
-      fmP && fmP !== '9x16' ? null : seg('Guías de redes', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => { S.zona = v; const z = zonaSegura(v); phone.querySelector('.zona')?.remove(); if (z) phone.append(z); document.querySelectorAll('.col-video .seg-b').forEach((b) => { b.classList.toggle('on', b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v])); b.setAttribute('aria-checked', String(b.classList.contains('on'))); }); }),
+      window.innerWidth >= 900 || (fmP && fmP !== '9x16') ? null : seg('Guías de redes', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => { S.zona = v; const z = zonaSegura(v); phone.querySelector('.zona')?.remove(); if (z) phone.append(z); document.querySelectorAll('.col-video .seg-b').forEach((b) => { b.classList.toggle('on', b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v])); b.setAttribute('aria-checked', String(b.classList.contains('on'))); }); }),
       h('p', { id: 'th-dirty', class: 'dirty', hidden: true }, ''))
   }
   // ---------- línea de tiempo: títulos, zooms, cámara lenta y cortes de un vistazo ----------
@@ -1043,6 +1044,58 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     setTimeout(() => { if (P.inline) pintarPanel(); else pintarTiles(); decorar(col); }, 0);
     return col;
   }
+  // ---------- Perfiles: todo el estado del video (estilo, subtítulos, colores, audio, cortes, formato, cierre y filtros) en un clic ----------
+  const AJENO_CORTES = ['manual', 'ignorar', 'rangos', 'borradas', 'auto'];  // lo que depende del video concreto no se guarda
+  function capturarPerfil(nombre) {
+    const P = plan(), cortes = Object.fromEntries(Object.entries(P.cortes || {}).filter(([k]) => !AJENO_CORTES.includes(k)));
+    return { id: 's' + Date.now().toString(36), nombre, style: structuredClone(estilo()), extra: structuredClone({ audio: P.audio, cortes, formato: P.formato, cierre: P.cierre, filtros: (P.filtros || []).filter((f) => f.start == null) }) };
+  }
+  async function aplicarPerfil(e) {
+    const P = plan(), antesFormato = P.formato;
+    P.style = fusionar(estilo(), structuredClone(e.style));
+    const x = e.extra;
+    if (x) {
+      if (x.audio) P.audio = { ...P.audio, ...structuredClone(x.audio) };
+      if (x.formato) P.formato = x.formato;
+      if (x.cierre) P.cierre = { ...P.cierre, ...structuredClone(x.cierre) };
+      if (x.filtros) P.filtros = [...(P.filtros || []).filter((f) => f.start != null), ...structuredClone(x.filtros)];
+      if (x.cortes) { Object.assign(P.cortes, structuredClone(x.cortes)); await recalcularCortes(); }
+    }
+    cambio();
+    if (P.formato !== antesFormato) pintar(); else { pintarPanel(); if (live) live.redraw(); }
+    toast(`Perfil «${e.nombre}» aplicado`);
+  }
+  function botonPerfiles() {
+    const lista = h('div', { class: 'pop pop-abajo pop-perfiles', hidden: true, role: 'dialog', 'aria-label': 'Perfiles' });
+    const guardar = () => guardarAjustes(S.aj);
+    const nombre = h('input', { type: 'text', class: 'perfil-nombre', placeholder: 'Nombre del perfil', 'aria-label': 'Nombre del perfil', autocomplete: 'off' });
+    const pintar_ = () => {
+      const lst = S.aj.estilos || [];
+      lista.replaceChildren(
+        h('p', { class: 'pop-sec' }, 'Perfiles'),
+        ...(lst.length ? lst.map((e) => {
+          const def = S.aj.estiloDefecto === e.id;
+          return h('div', { class: 'perfil-fila' },
+            h('button', { type: 'button', class: 'perfil-usar', title: 'Aplicar a este video', onclick: async () => { cerrar(); await aplicarPerfil(e); } },
+              h('span', { class: 'look-aa', style: `font-family:${fam(e.style.font)};color:${e.style.accent}` }, 'Aa'), h('strong', {}, e.nombre)),
+            h('button', { type: 'button', class: 'perfil-ic' + (def ? ' on' : ''), title: def ? 'Se usa en videos nuevos (clic para quitar)' : 'Usar en videos nuevos', 'aria-pressed': String(def), onclick: () => { S.aj.estiloDefecto = def ? null : e.id; guardar(); pintar_(); }, html: ic('estrella', 16) }),
+            h('button', { type: 'button', class: 'perfil-ic', title: 'Actualizar con lo que tienes ahora', onclick: () => { const n = capturarPerfil(e.nombre); e.style = n.style; e.extra = n.extra; guardar(); toast(`«${e.nombre}» actualizado`); }, html: ic('guardar', 16) }),
+            h('button', { type: 'button', class: 'perfil-ic borrar', title: 'Borrar perfil', onclick: (ev) => { const b = ev.currentTarget; if (!b.classList.contains('seguro')) { b.classList.add('seguro'); b.title = 'Clic de nuevo para borrar'; setTimeout(() => b.classList.remove('seguro'), 2500); return; } S.aj.estilos = S.aj.estilos.filter((x) => x.id !== e.id); if (S.aj.estiloDefecto === e.id) S.aj.estiloDefecto = null; guardar(); pintar_(); }, html: ic('x', 16) }));
+        }) : [h('p', { class: 'pop-vacio' }, 'Sin perfiles')]),
+        h('hr', { class: 'pop-sep' }),
+        h('div', { class: 'perfil-nuevo' }, nombre, h('button', { type: 'button', class: 'btn gold sm', onclick: () => {
+          const n = nombre.value.trim(); if (!n) { nombre.focus(); return; }
+          S.aj.estilos = [...(S.aj.estilos || []), capturarPerfil(n)]; guardar(); nombre.value = ''; pintar_(); toast(`Perfil «${n}» guardado`);
+        } }, 'Guardar lo actual')));
+    };
+    nombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lista.querySelector('.perfil-nuevo .btn')?.click(); } });
+    const cerrar = () => { lista.hidden = true; document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+    const fuera = (e) => { if (!wrap.contains(e.target)) cerrar(); }; const esc = (e) => { if (e.key === 'Escape') cerrar(); };
+    const b = h('button', { type: 'button', class: 'btn ghost sm btn-perfiles', title: 'Perfiles: guardar y aplicar todo el estilo', 'aria-label': 'Perfiles', 'aria-haspopup': 'dialog', html: ic('estrella', 18),
+      onclick: () => { if (lista.hidden) { pintar_(); lista.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
+    const wrap = h('div', { class: 'pop-wrap' }, b, lista);
+    return wrap;
+  }
   // Prioridad del diseño (como en Edits): qué zona ocupa todo el alto o todo el ancho de la ventana.
   const PRIO = [
     ['tl', 'Línea de tiempo', 'Ocupa todo el ancho de la ventana', '<rect x="1.5" y="1.5" width="41" height="31" rx="5"/><rect x="5" y="5" width="15" height="14" rx="2" fill-opacity=".25"/><rect x="23" y="5" width="16" height="14" rx="2" fill-opacity=".25"/><rect x="5" y="22" width="34" height="7" rx="2" class="on"/>'],
@@ -1050,16 +1103,39 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     ['der', 'Ajustes', 'La tarjeta de ajustes ocupa toda la altura', '<rect x="1.5" y="1.5" width="41" height="31" rx="5"/><rect x="27" y="5" width="12" height="24" rx="2" class="on"/><rect x="5" y="5" width="19" height="14" rx="2" fill-opacity=".25"/><rect x="5" y="22" width="19" height="7" rx="2" fill-opacity=".25"/>'],
   ];
   const prioridadDiseno = () => { try { const v = localStorage.getItem('estudio.prio'); return PRIO.some((x) => x[0] === v) ? v : 'tl'; } catch { return 'tl'; } };
+  // Diseños guardados: la posición y el tamaño de todo (pasos, ajustes, línea de tiempo) se guardan con nombre.
+  const leerDisenos = () => { try { return JSON.parse(localStorage.getItem('estudio.disenos') || '[]'); } catch { return []; } };
+  const guardarDisenos = (l) => { try { localStorage.setItem('estudio.disenos', JSON.stringify(l)); } catch { /* sin memoria */ } };
+  const LS_DISENO = ['estudio.layout', 'estudio.anchos', 'estudio.panel', 'estudio.prio'];
+  const capturarDiseno = (nombre) => ({ id: 'd' + Date.now().toString(36), nombre, valores: Object.fromEntries(LS_DISENO.map((k) => { try { return [k, localStorage.getItem(k)]; } catch { return [k, null]; } })) });
+  function aplicarDiseno(d) { for (const k of LS_DISENO) { try { if (d.valores[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, d.valores[k]); } catch { /* sin memoria */ } } pintar(); }
   function botonDiseno() {
-    const lista = h('div', { class: 'pop pop-abajo', hidden: true, role: 'dialog', 'aria-label': 'Prioridades del diseño' }, h('p', { class: 'pop-sec' }, 'Prioridades del diseño'));
-    const pintar = () => lista.replaceChildren(lista.firstChild, ...PRIO.map(([id, t, d, svg]) => h('button', { type: 'button', class: 'pop-fila prio-op' + (prioridadDiseno() === id ? ' on' : ''), 'aria-pressed': String(prioridadDiseno() === id),
-      onclick: () => { try { localStorage.setItem('estudio.prio', id); } catch { /* sin memoria */ } const ed = document.querySelector('.ed.ws'); if (ed) ed.dataset.prio = id; pintar(); cerrar(); if (timeline) setTimeout(() => timeline.pintar(), 0); } },
-      h('span', { class: 'prio-ic', html: `<svg viewBox="0 0 44 34" width="44" height="34" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${svg}</svg>` }),
-      h('span', { class: 'pop-tx' }, h('strong', {}, t), h('small', {}, d)))));
+    const lista = h('div', { class: 'pop pop-abajo', hidden: true, role: 'dialog', 'aria-label': 'Diseño' });
+    const nombre = h('input', { type: 'text', class: 'perfil-nombre', placeholder: 'Nombre del diseño', 'aria-label': 'Nombre del diseño', autocomplete: 'off' });
+    const pintar_ = () => {
+      const ds = leerDisenos();
+      lista.replaceChildren(
+        h('p', { class: 'pop-sec' }, 'Prioridad'),
+        ...PRIO.map(([id, t, d, svg]) => h('button', { type: 'button', class: 'pop-fila prio-op' + (prioridadDiseno() === id ? ' on' : ''), 'aria-pressed': String(prioridadDiseno() === id),
+          onclick: () => { try { localStorage.setItem('estudio.prio', id); } catch { /* sin memoria */ } const ed = document.querySelector('.ed.ws'); if (ed) ed.dataset.prio = id; pintar_(); if (timeline) setTimeout(() => timeline.pintar(), 0); } },
+          h('span', { class: 'prio-ic', html: `<svg viewBox="0 0 44 34" width="44" height="34" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${svg}</svg>` }),
+          h('span', { class: 'pop-tx' }, h('strong', {}, t), h('small', {}, d)))),
+        h('hr', { class: 'pop-sep' }),
+        h('p', { class: 'pop-sec' }, 'Diseños guardados'),
+        ...(ds.length ? ds.map((d) => h('div', { class: 'perfil-fila' },
+          h('button', { type: 'button', class: 'perfil-usar', title: 'Aplicar este diseño', onclick: () => { cerrar(); aplicarDiseno(d); } }, h('strong', {}, d.nombre)),
+          h('button', { type: 'button', class: 'perfil-ic', title: 'Actualizar con el diseño actual', onclick: () => { const n = capturarDiseno(d.nombre); d.valores = n.valores; guardarDisenos(ds); toast(`«${d.nombre}» actualizado`); }, html: ic('guardar', 16) }),
+          h('button', { type: 'button', class: 'perfil-ic borrar', title: 'Borrar diseño', onclick: (ev) => { const b = ev.currentTarget; if (!b.classList.contains('seguro')) { b.classList.add('seguro'); b.title = 'Clic de nuevo para borrar'; setTimeout(() => b.classList.remove('seguro'), 2500); return; } guardarDisenos(ds.filter((x) => x.id !== d.id)); pintar_(); }, html: ic('x', 16) }))) : [h('p', { class: 'pop-vacio' }, 'Sin diseños')]),
+        h('div', { class: 'perfil-nuevo' }, nombre, h('button', { type: 'button', class: 'btn gold sm', onclick: () => {
+          const n = nombre.value.trim(); if (!n) { nombre.focus(); return; }
+          guardarDisenos([...leerDisenos(), capturarDiseno(n)]); nombre.value = ''; pintar_(); toast(`Diseño «${n}» guardado`);
+        } }, 'Guardar este diseño')));
+    };
+    nombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lista.querySelector('.perfil-nuevo .btn')?.click(); } });
     const cerrar = () => { lista.hidden = true; document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
     const fuera = (e) => { if (!wrap.contains(e.target)) cerrar(); }; const esc = (e) => { if (e.key === 'Escape') cerrar(); };
-    const b = h('button', { type: 'button', class: 'btn ghost sm btn-diseno', title: 'Diseño: qué zona tiene prioridad', 'aria-label': 'Prioridades del diseño', 'aria-haspopup': 'dialog',
-      html: ic('formato', 18), onclick: () => { if (lista.hidden) { pintar(); lista.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
+    const b = h('button', { type: 'button', class: 'btn ghost sm btn-diseno', title: 'Diseño: prioridad y diseños guardados', 'aria-label': 'Diseño', 'aria-haspopup': 'dialog',
+      html: ic('formato', 18), onclick: () => { if (lista.hidden) { pintar_(); lista.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
     const wrap = h('div', { class: 'pop-wrap' }, b, lista);
     return wrap;
   }
@@ -1211,11 +1287,23 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (r && typeof r.then === 'function') r.then(pintarEn); else pintarEn(r);
   }
   // Tarjetas largas: la primera abierta y el resto plegadas. Se recuerda lo que abres aunque el panel se repinte.
+  const PESTANAS = new Set(['subs', 'titulos', 'frases']);
   function plegables(tgt, id) {
     tgt.classList.remove('con-acc');
     if (!S.panel) return;
     const cards = [...tgt.children].filter((c) => c.matches('section.card') && c.querySelector(':scope > h2'));
     if (cards.length < 3) return;
+    // Tarjetas que se editan juntas (texto, letra y color de los subtítulos, etc.): pestañas en vez de plegables, un solo clic para cambiar.
+    if (PESTANAS.has(id)) {
+      S.pest = S.pest || {};
+      const sel = Math.min(S.pest[id] ?? 0, cards.length - 1);
+      const nav = h('div', { class: 'sec-tabs', role: 'tablist' }, cards.map((c, i) => h('button', { type: 'button', role: 'tab', class: 'sec-tab' + (i === sel ? ' on' : ''), 'aria-selected': String(i === sel),
+        onclick: () => { S.pest[id] = i; nav.querySelectorAll('.sec-tab').forEach((b, k) => { b.classList.toggle('on', k === i); b.setAttribute('aria-selected', String(k === i)); }); cards.forEach((x, k) => { x.hidden = k !== i; }); } },
+        (c.querySelector(':scope > h2').textContent || '').trim())));
+      cards.forEach((c, i) => { c.hidden = i !== sel; });
+      tgt.insertBefore(nav, cards[0]);
+      return;
+    }
     tgt.classList.add('con-acc'); S.acc = S.acc || {};
     cards.forEach((c, i) => {
       const t = c.querySelector(':scope > h2'), clave = `${id}:${t.textContent.trim()}`;
@@ -1342,7 +1430,14 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         seg('Modo', [['rapida', 'Rápida'], ['precisa', 'Precisa']], m, poner));
       pintarTrans(r.modo || 'rapida');
     }).catch(() => cajaTrans.replaceChildren(h('h2', {}, 'Velocidad de la transcripción'), h('p', { class: 'sub vivo' }, 'No pude leer este ajuste.')));
+    const fm = S.p && S.p.plan ? (S.p.plan.formato || '9x16') : null;
+    const cardVista = fm === '9x16' ? h('section', { class: 'card' }, h('h2', {}, 'Vista previa'),
+      seg('Guías de redes', [['none', 'Ninguna'], ['tiktok', 'TikTok'], ['reels', 'Reels']], S.zona, (v) => {
+        S.zona = v; const ph = document.querySelector('.phone'); if (!ph) return; ph.querySelector('.zona')?.remove(); const z = zonaSegura(v); if (z) ph.append(z);
+        document.querySelectorAll('.hoja .seg-b').forEach((b) => { const on_ = b.textContent === ({ none: 'Ninguna', tiktok: 'TikTok', reels: 'Reels' }[v]); b.classList.toggle('on', on_); b.setAttribute('aria-checked', String(on_)); });
+      })) : null;
     return [
+      cardVista,
       cajaTrans,
       h('section', { class: 'card' }, h('h2', {}, 'Vocabulario propio'),
         h('p', { class: 'sub' }, 'Palabras que el reconocimiento de voz suele escribir mal. Los términos se le piden a Whisper antes de transcribir y se corrigen las variantes parecidas, como "membrecías" o "marketógrafos". Los reemplazos fijos cambian una palabra por otra siempre.'),
@@ -1354,10 +1449,6 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('section', { class: 'card' }, h('h2', {}, 'Preferencias'),
         toggle('Avisarme cuando termine un video', aj.notificar, (v) => { aj.notificar = v; guardar(); if (v && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission(); pintarPanel(); }),
         toggle('Atajos de teclado (espacio, flechas, Cmd+Z)', aj.atajos, (v) => { aj.atajos = v; guardar(); pintarPanel(); })),
-      h('section', { class: 'card' }, h('h2', {}, 'Estilos guardados'),
-        h('p', { class: 'sub' }, 'Guarda tipografías, colores, película, fondo y zooms para usarlos en cualquier video. Uno puede ser el punto de partida de todos los videos nuevos.'),
-        lista(),
-        S.p && S.p.plan ? h('div', { class: 'row-gap' }, nombreEst, h('button', { type: 'button', class: 'btn gold', onclick: () => { const n = nombreEst.value.trim(); if (!n) return toast('Ponle un nombre al estilo.'); aj.estilos.push({ id: 's' + Date.now().toString(36), nombre: n, style: structuredClone(estilo()) }); guardar(); toast(`Estilo ${n} guardado.`); pintarPanel(); } }, 'Guardar el estilo de este video')) : h('p', { class: 'hint' }, 'Abre un video para guardar su estilo.')),
       h('section', { class: 'card' }, h('h2', {}, 'Pantalla y copias del Estudio'),
         h('p', { class: 'sub' }, 'Tamaño de toda la interfaz y copias de tus guiones, temas y clases.'),
         h('div', { class: 'row-gap' },
@@ -1806,7 +1897,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     };
     const enCorte = (t) => (c.on && (c.rangos || []).some(([a, b]) => t >= a && t <= b)) || (c.borradas || []).some(([a, b]) => t >= a && t <= b);
     const alternar = (r) => {
-      if (r.tipo === 'texto') return toast('Esto se quitó con el texto. Devuélvelo desde la transcripción.');
+      if (r.tipo === 'texto') return toast('Quitado con el texto');
       if (r.tipo === 'manual') { c.manual.splice(r.i, 1); sel = null; S.corteSel = null; }
       else if (ignorado(r)) c.ignorar = c.ignorar.filter(([a, b]) => !(mid(r) >= a && mid(r) <= b));
       else c.ignorar.push([r.o[0], r.o[1]]);
@@ -1864,7 +1955,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
         ...(r.tipo === 'texto' ? [h('p', { class: 'hint' }, 'Para devolverlo, selecciona esas palabras tachadas en la transcripción y pulsa Supr.')] : [
           h('div', { class: 'row-gap' },
             btn('Escuchar', 'play', () => { if (video) { video.currentTime = tVideo(Math.max(0, r.s - 1)); video.play().catch(() => {}); } }),
-            r.tipo === 'auto' ? btn(off ? 'Volver a cortar' : 'Conservar', off ? 'cortes' : 'check', () => alternar(r), off ? 'ghost' : 'gold') : btn('Quitar este corte', 'x', () => alternar(r))),
+            r.tipo === 'auto' ? btn(off ? 'Cortar esta parte' : 'Conservar esta parte', off ? 'cortes' : 'check', () => alternar(r), off ? 'ghost' : 'gold') : btn('Conservar esta parte', 'check', () => alternar(r))),
           off ? null : h('div', { class: 'tl-ajustes' }, par('Inicio', 'l'), par('Final', 'r'))]));
       decorar(detalle);
     };
@@ -1888,10 +1979,27 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       return dentro ? { tipo: 'cuerpo', cu: dentro } : { tipo: 'vacio' };
     };
     const saltar = (t) => { if (video) video.currentTime = tVideo(t); };
+    // Estados del mouse: cada cosa se ve distinta antes de tocarla.
+    //   zona vacía     -> flecha y una línea fantasma (clic: ir ahí; arrastrar: marcar un corte)
+    //   dentro de corte -> dedo (clic alterna) y una etiqueta con lo que hará
+    //   borde de corte  -> flechas laterales (arrastrar: ajustar) y el borde se ilumina
+    const fantasma = h('div', { class: 'tl-fantasma', hidden: true }), chip = h('div', { class: 'tl-chip', hidden: true });
+    tl.append(fantasma, chip);
+    const sinHover = () => { fantasma.hidden = true; chip.hidden = true; capaCortes.querySelectorAll('.hover, .borde-hover').forEach((x) => x.classList.remove('hover', 'borde-hover')); };
+    tl.addEventListener('pointerleave', sinHover);
     tl.addEventListener('pointermove', (e) => {
-      if (e.buttons) return;
-      const g = golpe(e.clientX);
-      tl.style.cursor = g.tipo === 'borde' ? 'ew-resize' : g.tipo === 'cuerpo' ? (g.cu.tipo === 'texto' ? 'pointer' : 'grab') : 'crosshair';
+      if (e.buttons) { sinHover(); return; }
+      const g = golpe(e.clientX), r = tl.getBoundingClientRect();
+      sinHover();
+      if (g.tipo === 'borde') { tl.style.cursor = 'ew-resize'; const k = todos.indexOf(g.cu); const nodo = capaCortes.children[k]; if (nodo) nodo.classList.add('hover', 'borde-hover'); return; }
+      if (g.tipo === 'cuerpo' && g.cu.tipo !== 'texto') {
+        tl.style.cursor = 'pointer';
+        const k = todos.indexOf(g.cu), nodo = capaCortes.children[k]; if (nodo) nodo.classList.add('hover');
+        chip.textContent = ignorado(g.cu) ? 'Cortar' : 'Conservar'; chip.style.left = `${tx((g.cu.s + g.cu.e) / 2)}%`; chip.hidden = false;
+        return;
+      }
+      tl.style.cursor = 'default';
+      if (g.tipo === 'vacio') { fantasma.style.left = `${((e.clientX - r.left) / r.width) * 100}%`; fantasma.hidden = false; }
     });
     tl.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !e.isPrimary) return;
@@ -1902,6 +2010,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       if (guia) capaCortes.append(guia);
       if (g.tipo !== 'vacio') { sel = idDe(g.cu); S.corteSel = sel; pintarCortes(); pintarDetalle(); }
       tl.setPointerCapture(e.pointerId);
+      tl.style.cursor = g.tipo === 'borde' ? 'ew-resize' : g.tipo === 'cuerpo' ? 'pointer' : 'col-resize';
       const arrancaEdicion = () => { let cu = g.cu; if (cu.tipo === 'auto') cu = aManual(cu); idx = cu.i; base = [...c.manual[idx]]; };
       tl.onpointermove = (ev) => {
         if (!movido && Math.abs(ev.clientX - x0) < 4) return;
@@ -1913,7 +2022,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
           guia.style.left = `${tx(a)}%`; guia.style.width = `${tx(b - a)}%`; return;
         }
         if (g.cu.tipo === 'texto') return;
-        if (!movido) { movido = true; arrancaEdicion(); }
+        if (!movido) { movido = true; arrancaEdicion(); if (g.tipo === 'cuerpo') tl.style.cursor = 'grabbing'; }
         const [a, b] = base;
         if (g.tipo === 'borde') c.manual[idx] = g.lado === 'l' ? [+Math.max(0, Math.min(t, b - 0.05)).toFixed(3), b] : [a, +Math.min(dur, Math.max(t, a + 0.05)).toFixed(3)];
         else { const len = b - a, ini = Math.max(0, Math.min(dur - len, a + (t - t0))); c.manual[idx] = [+ini.toFixed(3), +(ini + len).toFixed(3)]; }
@@ -1966,7 +2075,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     cont.append(
       h('section', { class: 'card card-cortes' }, h('h2', {}, 'Cortes'),
         h('div', { class: 'cortes-barra' }, filaPresets, h('div', { class: 'cortes-zoom' },
-          ayudaCtl('Alejar (o Cmd y rueda)', 'zoom', () => poner(zoom * 0.7)), ayudaCtl('Acercar (o Cmd y rueda)', 'zoom', () => poner(zoom * 1.4)), ayudaCtl('Ver todo', 'tamano', () => poner(1)))),
+          ayudaCtl('Alejar', 'zoomMenos', () => poner(zoom * 0.7)), ayudaCtl('Acercar', 'zoom', () => poner(zoom * 1.4)), ayudaCtl('Ver todo', 'tamano', () => poner(1)))),
         c.on && c.modo !== 'palabras' ? h('div', { class: 'aviso' }, h('span', {}, 'Este video usaba el corte por volumen, que puede comerse palabras bajitas.'), h('button', { type: 'button', class: 'btn gold sm', onclick: () => aplicar('agil') }, 'Pasar al corte por palabras')) : null,
         scroller, detalle, resumen),
       c.on ? h('details', { class: 'card' }, h('summary', {}, 'Cuánto aire dejar alrededor de las palabras'),
@@ -2999,15 +3108,15 @@ Lo que necesito de ti:
       const mostrar = S.verTodasSug ? sug : sug.slice(0, 6);
       const nuevo = h('div', {}, h('h2', {}, 'Limpieza sugerida'),
         sug.length ? [
-          h('p', { class: 'sub vivo' }, `Encontré ${sug.length} ${sug.length === 1 ? 'cosa' : 'cosas'} que probablemente quieras quitar. Escucha cada una y decide. Lo que quites se corta del video y se puede devolver.`),
+          h('p', { class: 'sub vivo' }, `${sug.length} ${sug.length === 1 ? 'sugerencia' : 'sugerencias'}`),
           h('div', { class: 'row-gap' }, grupos.map(([t, l]) => h('button', { type: 'button', class: 'btn ghost sm', onclick: () => quitar(l) }, `Quitar ${l.length > 1 ? 'todas' : 'la'} ${TIPO_LIMPIEZA[t][0].toLowerCase()}${l.length > 1 ? 's' : ''} (${l.length})`))),
           h('ul', { class: 'evs lim' }, mostrar.map((s) => h('li', { class: 'ev lim-i' },
             h('div', { class: 'lim-t' }, h('span', { class: 'lim-tag t-' + s.tipo }, TIPO_LIMPIEZA[s.tipo][0]), h('span', { class: 'lim-s' }, MMSS(s.t0))),
             h('p', { class: 'lim-txt', title: TIPO_LIMPIEZA[s.tipo][1] }, h('s', {}, s.texto), s.tipo === 'frase' ? ` ${s.retoma}…` : s.despues ? ` ${s.despues}…` : ''),
             h('div', { class: 'row-gap' },
               h('button', { type: 'button', class: 'btn ghost sm', onclick: () => escuchar(s), html: ic('play', 14) + ' Escuchar' }),
-              h('button', { type: 'button', class: 'btn gold sm', onclick: () => quitar([s]) }, 'Quitar'),
-              h('button', { type: 'button', class: 'btn ghost sm', onclick: () => ignorar(s) }, 'Dejarla'))))),
+              h('button', { type: 'button', class: 'btn gold sm', onclick: () => quitar([s]) }, 'Cortar'),
+              h('button', { type: 'button', class: 'btn ghost sm', onclick: () => ignorar(s) }, 'Conservar'))))),
           sug.length > 6 ? h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.verTodasSug = !S.verTodasSug; pintar(); } }, S.verTodasSug ? 'Ver menos' : `Ver las ${sug.length - 6} restantes`) : null,
         ] : h('p', { class: 'sub' }, (c.sugIgnoradas || []).length ? 'Ya revisaste todo lo que encontré.' : 'No encontré repeticiones ni muletillas. Si algo se te escapó, selecciona esas palabras en la transcripción y pulsa Supr.'),
         (c.sugIgnoradas || []).length ? h('div', {}, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { c.sugIgnoradas = []; cambio(); pintar(); } }, 'Volver a mostrar las que dejé')) : null);
