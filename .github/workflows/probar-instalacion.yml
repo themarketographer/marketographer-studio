@@ -38,6 +38,19 @@ jobs:
           $out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$env:ESTUDIO_DIR\Estudio.ps1"
           Write-Host $out
           if (($out -join ' ') -notmatch 'Servidor listo') { throw 'El lanzador no arrancó el servidor' }
+      - name: Probar los accesos directos (segunda pasada del instalador, ya instalado)
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+          ESTUDIO_RAMA: ${{ github.ref_name }}
+        run: |
+          irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/instalar.ps1" | iex
+          $d = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Estudio Marketographer.lnk'
+          $m = Join-Path ([Environment]::GetFolderPath('Programs')) 'Estudio Marketographer.lnk'
+          foreach ($f in @($d, $m)) { if (-not (Test-Path $f)) { throw "Falta el acceso directo $f" } }
+          $a = (New-Object -ComObject WScript.Shell).CreateShortcut($d)
+          Write-Host "Destino: $($a.TargetPath) $($a.Arguments)  Icono: $($a.IconLocation)"
+          if (-not (Test-Path "$env:ESTUDIO_DIR\web\logo.ico")) { throw 'Falta el icono' }
       - name: Registro del servidor si algo falló
         if: failure()
         shell: powershell
