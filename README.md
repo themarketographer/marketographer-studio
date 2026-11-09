@@ -3,28 +3,33 @@
 Herramienta local para convertir tus clases en guiones y, más adelante, editar tus videos con tu estilo.
 
 ## Instalar en tu Mac
-**Opción 1: el instalable (.dmg).** Descarga `Estudio-Marketographer-<versión>.dmg` desde la sección *Releases* de este repositorio, arrastra la app a Aplicaciones y ábrela (la primera vez: clic derecho > Abrir). Se prepara sola: baja unos 1,5 GB una vez y después abre en segundos, sin internet. Avisa cuando hay una versión nueva.
+**Lo más fácil: pídeselo a tu Claude.** Pégale esto:
 
-**Opción 2: un comando en Terminal.** Hace lo mismo y crea la app en Aplicaciones:
+> Instala el Estudio Marketographer en mi Mac siguiendo las instrucciones de https://github.com/themarketographer/marketographer-studio/blob/main/INSTALAR-CON-CLAUDE.md y avísame cuando esté abierto.
+
+Las instrucciones completas (y qué hacer si algo falla) están en [INSTALAR-CON-CLAUDE.md](INSTALAR-CON-CLAUDE.md).
+
+**Sin Claude, un comando en Terminal.** Crea la app en Aplicaciones:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/themarketographer/marketographer-studio/main/instalar.sh | bash
 ```
-No hace falta tener Homebrew, Node ni Python: todo se baja solo y queda dentro de `~/EstudioMarketographer`. Para actualizar, pega el mismo comando (o acepta el aviso al abrir la app). Tus videos viven en `~/EstudioMarketographer/data` y no se tocan.
+No hace falta tener Homebrew, Node ni Python: todo se baja solo (~1,5 GB la primera vez) y queda dentro de `~/EstudioMarketographer`. Para actualizar, pega el mismo comando (o acepta el aviso al abrir la app). Tus videos viven en `~/EstudioMarketographer/data` y no se tocan.
+
+**O el instalable (.dmg).** Descárgalo de la sección *Releases*, arrastra la app a Aplicaciones y ábrela (la primera vez: clic derecho > Abrir). Se prepara sola y después abre en segundos, sin internet. Avisa cuando hay una versión nueva.
 
 **Para quien arma el instalable:** `bash empaquetar/construir.sh` crea el .dmg en `dist/`.
 
-## Clonar y probar (alumnos)
+## Clonar el código (para programar)
 ```bash
 git clone https://github.com/themarketographer/marketographer-studio.git
 cd marketographer-studio
-npm install
-npm start   # abre http://localhost:4177
+bash preparar.sh   # una vez: Node, Python, librerías y modelos del motor de video
+bash Iniciar.command
 ```
-En Mac, `Instalar.command` (una vez) prepara el motor de video. La carpeta `data/` se crea sola con tus propios guiones.
+La carpeta `data/` se crea sola con tus propios guiones.
 
 ## Cómo abrirlo
-Doble clic en `Iniciar.command`. Se abre en http://localhost:4177. Cierra la ventana negra para apagarlo.
-Necesita Node.js (nodejs.org, versión LTS). No instala nada más.
+Con la app instalada, el icono de *Estudio Marketographer*. En una copia clonada, `Iniciar.command`. Se abre en http://localhost:4177.
 
 ## Qué hay hoy
 - **Guiones**: temas, formatos (Talking Head, Pro vs Noob, Storytelling), prompt listo para Claude, guion guardado y modo grabación.
@@ -65,8 +70,8 @@ Por defecto busca en `~/Documents/Zoom`. Para otra ruta: `ZOOM_DIR=/ruta node se
 
 ## Motor de video (Talking Head)
 
-1. Haz doble clic en `Instalar.command` una sola vez. Crea un entorno privado y descarga los modelos.
-2. Abre el Estudio con `Iniciar.command` y entra en Talking Head.
+1. El motor se prepara solo la primera vez (`preparar.sh`: entorno privado y modelos).
+2. Abre el Estudio y entra en Talking Head.
 3. Sube un video, pulsa Analizar, ajusta textos y estilo, genera la vista previa y exporta.
 
 ## Editor Talking Head: qué incluye

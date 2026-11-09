@@ -369,7 +369,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     root.replaceChildren(
       h('div', { class: 'page-head row-between' }, h('div', {}, h('h1', {}, 'Talking Head'), h('p', {}, 'Tú hablas a cámara. El editor transcribe, te separa del fondo y propone títulos, subtítulos, zooms y sonidos. Tú ajustas lo que quieras.')),
         h('button', { class: 'btn ghost', onclick: () => abrirHoja('ajustes'), html: ic('ajustes', 16) + ' Ajustes' })),
-      ...[!S.motorListo ? h('div', { class: 'callout warn' }, h('strong', {}, 'Falta instalar el motor. '), 'Haz doble clic en Instalar.command, que está en la carpeta del Estudio, y vuelve a abrir esta pantalla.') : null].filter(Boolean),
+      ...[!S.motorListo ? h('div', { class: 'callout warn' }, h('strong', {}, 'Falta instalar el motor. '), 'Cierra el Estudio y vuélvelo a abrir: se prepara solo (necesita internet). Si no pasa nada, pídele a tu Claude que ejecute preparar.sh en la carpeta EstudioMarketographer.') : null].filter(Boolean),
       zona,
       h('div', { class: 'voz-cta' }, h('span', {}, 'No sales en cámara?'), h('button', { type: 'button', class: 'btn ghost', onclick: pantallaVoz, html: ic('mic', 16) + ' Crear un video con solo tu voz' })),
       S.proyectos.length ? h('div', {}, h('h2', { class: 'sec' }, 'Tus proyectos'),
