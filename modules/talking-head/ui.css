@@ -485,7 +485,7 @@ input[type=range]::-webkit-slider-thumb { transition: transform 150ms var(--ease
 .lt-inner { position: relative; cursor: default; touch-action: none; user-select: none; }
 .lt-fila { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); pointer-events: none; }
 .lt-marca { position: absolute; top: 0; height: 22px; border-left: 1px solid var(--border); pointer-events: none; font-style: normal; } .lt-marca span { margin-left: 3px; color: var(--muted); }
-.lt-b { position: absolute; box-sizing: border-box; border-radius: 6px; overflow: hidden; white-space: nowrap; padding: 0 5px; display: flex; align-items: center; cursor: grab; font-size: 11px; color: #181818; }
+.lt-b { position: absolute; box-sizing: border-box; border-radius: 6px; overflow: hidden; white-space: nowrap; padding: 0 5px; display: flex; align-items: center; cursor: ew-resize; font-size: 11px; color: #181818; }
 .lt-b.sel { outline: 2px solid var(--ink); z-index: 2; }
 .lt-fil { background: #ff9a5b; } .lt-tit { background: var(--accent); } .lt-esp { background: #b78cff; } .lt-lento { background: var(--ok); color: #fff; }
 .lt-zoom { background: #3cd7ff; min-width: 12px; width: 12px !important; margin-left: -6px; transform: rotate(45deg) scale(.6); border-radius: 3px; padding: 0; }
@@ -846,3 +846,7 @@ input[type=range] { min-height: 32px; cursor: pointer; }
 /* tarjeta Exportar: el ajuste personalizado respira entre controles */
 .hoja details > :not(summary) { margin-top: 14px; }
 .hoja details > summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+
+/* mientras arrastras en la línea de tiempo el cursor se queda fijo, sin importar sobre qué elemento pase */
+body.cursor-ew, body.cursor-ew * { cursor: ew-resize !important; }
+body.cursor-col, body.cursor-col * { cursor: col-resize !important; }

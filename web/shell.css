@@ -141,3 +141,16 @@ img.brand-mark { width: 40px; height: 40px; margin: -4px; }
 
 /* casillas y botones de opción nativos: tamaño normal (la regla de arriba los estiraba como si fueran un campo de texto) */
 input[type=checkbox], input[type=radio] { width: 20px; height: 20px; min-height: 0; padding: 0; flex: none; accent-color: var(--accent, var(--ink)); cursor: pointer; }
+
+/* Ventanas flotantes comunes (menús de acciones): vidrio oscuro, esquinas redondas y entrada suave */
+.pop-wrap { position: relative; display: inline-flex; }
+.pop { position: absolute; z-index: 60; width: 300px; max-width: 86vw; display: grid; gap: 2px; padding: 10px; background: color-mix(in srgb, var(--surface-200) 76%, transparent); -webkit-backdrop-filter: blur(30px) saturate(1.7); backdrop-filter: blur(30px) saturate(1.7); border: 1px solid rgba(255,255,255,.09); border-radius: 20px; box-shadow: 0 24px 60px rgba(0,0,0,.5); animation: popEntra 180ms var(--ease) both; }
+.pop[hidden] { display: none; } .pop-abajo { top: calc(100% + 10px); right: 0; }
+@keyframes popEntra { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+.pop-sec { margin: 4px 8px 2px; font: 600 13px var(--font-body); color: var(--ink-muted); }
+.pop-sep { border: 0; border-top: 1px solid rgba(255,255,255,.08); margin: 6px 4px; width: 100%; }
+.pop-it { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); font: 500 15px var(--font-body); cursor: pointer; transition: background 140ms var(--ease), transform 120ms var(--ease); }
+.pop-it:hover, .pop-it:focus-visible { background: rgba(255,255,255,.08); outline: none; } .pop-it:active { transform: scale(.98); } .pop-it.peligro { color: var(--neg); }
+.pop-it svg { flex: none; color: var(--ink-muted); } .pop-it:hover svg { color: var(--ink); }
+body.cursor-col, body.cursor-col * { cursor: col-resize !important; }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } }

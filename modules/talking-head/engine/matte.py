@@ -12,6 +12,7 @@ def run(proj, long_side=768, ratio=0.4, base=50, span=45, hilos=None, tramo=None
     proj = Path(proj)
     long_side = int(os.environ.get("ESTUDIO_MATTE_LADO", long_side))  # los procesos hijos heredan esto
     ratio = float(os.environ.get("ESTUDIO_MATTE_RATIO", ratio))
+    todos = os.environ.get("ESTUDIO_MATTE_TODOS") == "1"  # recorte mejorado: se recorta cada cuadro, no uno de cada dos
     cap = cv2.VideoCapture(str(proj / "source.mp4"))
     W, H = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -44,7 +45,7 @@ def run(proj, long_side=768, ratio=0.4, base=50, span=45, hilos=None, tramo=None
     prev, odd_pend = None, False
     esc = lambda m: (np.clip(m, 0, 1) * 255).astype(np.uint8)
     while k1 is None or n <= k1:
-        if n % 2:
+        if n % 2 and not todos:
             if not cap.grab():
                 break
             odd_pend = True
@@ -76,3 +77,30 @@ def run(proj, long_side=768, ratio=0.4, base=50, span=45, hilos=None, tramo=None
     enc.wait()
     if not tramo:
         status(proj, "recortar", base + span, f"Listo: {n} fotogramas")
+
+
+def mejorar(proj):
+    """Recorte de mayor calidad (opcional): más resolución para el modelo y cada cuadro por separado. Tarda varias veces más.
+    El recorte anterior se guarda como alpha_anterior.mp4 para poder volver a él."""
+    proj = Path(proj)
+    alpha, ant = proj / "alpha.mp4", proj / "alpha_anterior.mp4"
+    if alpha.exists() and not ant.exists():
+        alpha.rename(ant)
+    elif alpha.exists():
+        alpha.unlink()
+    cap = cv2.VideoCapture(str(proj / "source.mp4"))
+    mayor = max(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    cap.release()
+    os.environ["ESTUDIO_MATTE_LADO"] = str(min(1280, mayor))
+    os.environ["ESTUDIO_MATTE_RATIO"] = "0.6"
+    os.environ["ESTUDIO_MATTE_TODOS"] = "1"
+    try:
+        run(proj, base=3, span=94)
+    except BaseException:
+        alpha.unlink(missing_ok=True)
+        if ant.exists():
+            ant.rename(alpha)  # si algo falla, se queda el recorte de antes
+        raise
+    for f in ("preview.mp4", "final.mp4"):  # se hicieron con el recorte viejo
+        (proj / f).unlink(missing_ok=True)
+    status(proj, "analizado", 100, "Recorte mejorado")

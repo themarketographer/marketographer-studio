@@ -13,6 +13,9 @@ const minutosLectura = (txt) => {
   const seg = Math.round((palabras / 150) * 60);
   return { palabras, seg };
 };
+const ICONO_ESTADO = { idea: 'idea', guion: 'pen', grabado: 'video', publicado: 'check' };
+const ICONO_PLANT = { 'Historia personal': 'pen', 'Error común': 'x', 'Tutorial rápido': 'check', 'Opinión polémica': 'star' };
+const ICONO_FORMATO = { 'talking-head': 'video', 'pro-vs-noob': 'users', storytelling: 'film' };
 const etiqueta = (id) => ESTADOS.find((e) => e[0] === id)?.[1] || id;
 
 // Botón de dos pasos: el primer clic pide confirmar, el segundo ejecuta. Se desarma solo a los 3 s.
@@ -133,24 +136,31 @@ export async function mount(root, { api, toast, h, icon }) {
     area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); guardar(false); } });
     pintarMeta();
 
-    const estructura = h('select', { class: 'sel-s', 'aria-label': 'Estructura de partida', onchange: (e) => {
-      const p = PLANTILLAS.find(([n]) => n === e.target.value); e.target.value = ''; if (!p) return;
+    const aplicarEstructura = (tx) => {
       if (area.value.trim() && !confirm('Reemplazar el texto por esta estructura?')) return;
-      area.value = p[1]; S.borrador = p[1]; pintarMeta(); guardar(true); area.focus();
-    } }, h('option', { value: '' }, 'Estructura…'), PLANTILLAS.map(([n]) => h('option', { value: n }, n)));
+      area.value = tx; S.borrador = tx; pintarMeta(); guardar(true); area.focus();
+    };
+    const estructura = menu(icon('estructura', 18) + '<span class="ib-t">Estructura</span>', 'Estructura de partida', (cerrar) =>
+      [h('p', { class: 'pop-sec' }, 'Estructura de partida'), ...PLANTILLAS.map(([n, tx]) => filaMenu(ICONO_PLANT[n] || 'doc', n, () => { cerrar(); aplicarEstructura(tx); }))]);
+    const masAcciones = menu(icon('dots', 18), 'Más acciones', (cerrar) => [
+      filaMenu('copy', 'Copiar guion', () => { cerrar(); copiar(area.value, 'Guion copiado'); }),
+      g ? filaMenu('play', 'Modo grabación', () => { cerrar(); teleprompter(area.value || g.texto); }) : null,
+      h('hr', { class: 'pop-sep' }),
+      g ? filaMenu('trash', 'Borrar guion', async () => { cerrar(); if (!confirm('Borrar este guion?')) return; await api('/guiones/guiones/' + g.id, { method: 'DELETE' }); S.borrador = ''; await cargar(); render(); }, true) : null,
+      filaMenu('trash', 'Borrar tema', async () => { cerrar(); if (!confirm('Borrar este tema y sus guiones?')) return; await api('/guiones/temas/' + t.id, { method: 'DELETE' }); S.sel = null; S.borrador = ''; await cargar(); render(); }, true),
+    ].filter(Boolean));
     const bar = h('div', { class: 'tb' },
       h('div', { class: 'formats-s', role: 'tablist', 'aria-label': 'Formato' }, S.formatos.map((x) =>
         h('button', { role: 'tab', class: 'f' + (x.id === S.formato ? ' on' : ''), 'aria-selected': x.id === S.formato, title: x.resumen, onclick: async () => { await guardar(true); S.formato = x.id; S.borrador = ''; render(); } },
-          x.nombre, guionDe(t.id, x.id) ? h('i', { class: 'dot guion' }) : null))),
+          h('span', { class: 'f-ic', html: icon(ICONO_FORMATO[x.id] || 'video', 15) }), x.nombre, guionDe(t.id, x.id) ? h('i', { class: 'dot guion' }) : null))),
       h('div', { class: 'tb-acc' }, estructura,
-        h('button', { class: 'btn ghost sm', title: 'Copia la petición lista para pegar en Claude', onclick: async () => { const r = await api('/guiones/prompt', { method: 'POST', body: { temaId: t.id, formato: S.formato } }); copiar(r.prompt, 'Prompt copiado'); }, html: icon('copy') + ' Pedir a Claude' }),
-        g ? h('button', { class: 'btn dark sm', onclick: () => teleprompter(area.value || g.texto), html: icon('play') + ' Grabar' }) : null));
+        h('button', { class: 'btn gold sm', title: 'Copia la petición lista para pegar en Claude', onclick: async () => { const r = await api('/guiones/prompt', { method: 'POST', body: { temaId: t.id, formato: S.formato } }); copiar(r.prompt, 'Prompt copiado'); }, html: icon('copy', 16) + ' Pedir a Claude' }),
+        g ? h('button', { class: 'btn dark sm', onclick: () => teleprompter(area.value || g.texto), html: icon('play', 16) + ' Grabar' }) : null,
+        masAcciones));
 
     const PEST = {
       guion: () => [bar, area,
-        h('div', { class: 'pie-g' }, meta, estado, h('span', { class: 'grow' }),
-          g ? h('button', { class: 'btn ghost sm', onclick: () => copiar(area.value, 'Guion copiado'), html: icon('copy') + ' Copiar' }) : null,
-          g ? doble(h, { clase: 'btn ghost sm', icono: icon('trash'), texto: 'Borrar', aviso: '¿Seguro?', accion: async () => { await api('/guiones/guiones/' + g.id, { method: 'DELETE' }); S.borrador = ''; await cargar(); render(); } }) : null)],
+        h('div', { class: 'pie-g' }, meta, estado)],
       notas: () => [
         h('label', { class: 'field' }, 'Ángulo', h('input', { value: t.angulo || '', placeholder: 'Para quién o desde dónde', onchange: (e) => guardarTema({ angulo: e.target.value }) })),
         h('label', { class: 'field' }, 'Notas', h('textarea', { class: 'notas-area', rows: 10, placeholder: 'Ideas sueltas, frases, datos, copy', onchange: (e) => guardarTema({ notas: e.target.value }) }, t.notas || ''))],
@@ -167,10 +177,10 @@ export async function mount(root, { api, toast, h, icon }) {
       },
     };
     const nRefs = S.refs.filter((r) => r.temaId === t.id).length;
-    const tabs = h('div', { class: 'sec-tabs', role: 'tablist' }, [['guion', 'Guion'], ['notas', 'Notas'], ['refs', nRefs ? `Referencias (${nRefs})` : 'Referencias']].map(([id, n]) =>
-      h('button', { type: 'button', role: 'tab', class: 'sec-tab' + (S.tab === id ? ' on' : ''), 'aria-selected': String(S.tab === id), onclick: async () => { await guardar(true); S.tab = id; render(); } }, n)));
+    const tabs = h('div', { class: 'sec-tabs', role: 'tablist' }, [['guion', 'Guion', 'pen'], ['notas', 'Notas', 'doc'], ['refs', nRefs ? `Referencias (${nRefs})` : 'Referencias', 'link']].map(([id, n, ic_]) =>
+      h('button', { type: 'button', role: 'tab', class: 'sec-tab' + (S.tab === id ? ' on' : ''), 'aria-selected': String(S.tab === id), onclick: async () => { await guardar(true); S.tab = id; render(); } }, h('span', { class: 'f-ic', html: icon(ic_, 16) }), n)));
     const estados = h('div', { class: 'estados', role: 'group', 'aria-label': 'Estado' }, ESTADOS.map(([id, n]) =>
-      h('button', { type: 'button', class: 'est' + (t.estado === id ? ' on' : ''), 'aria-pressed': String(t.estado === id), title: n, onclick: () => guardarTema({ estado: id }) }, h('span', { class: 'dot ' + id }), n)));
+      h('button', { type: 'button', class: 'est' + (t.estado === id ? ' on' : ''), 'aria-pressed': String(t.estado === id), title: n, onclick: () => guardarTema({ estado: id }) }, h('span', { class: 'est-ic', html: icon(ICONO_ESTADO[id] || 'check', 16) }), n)));
 
     return h('section', { class: 'col-main' },
       h('div', { class: 'row-between' },
@@ -181,7 +191,7 @@ export async function mount(root, { api, toast, h, icon }) {
             if (!t.semana && ya >= 3) return toast('Ya tienes 3 esta semana');
             guardarTema({ semana: !t.semana });
           }, html: icon('star') }),
-          doble(h, { clase: 'btn ghost ib-s', icono: icon('trash'), texto: '', aviso: '¿Seguro?', accion: async () => { await api('/guiones/temas/' + t.id, { method: 'DELETE' }); S.sel = null; S.borrador = ''; await cargar(); render(); } }))),
+          null)),
       estados, tabs, ...PEST[S.tab]());
   }
 
@@ -333,6 +343,39 @@ export async function mount(root, { api, toast, h, icon }) {
       nodos);
   }
 
+  // Lista y detalle con un divisor que se arrastra; el ancho se recuerda.
+  const anchoLista = () => { try { return Math.max(240, Math.min(560, Number(localStorage.getItem('estudio.guiones.lista')) || 340)); } catch { return 340; } };
+  function columnas() {
+    const cols = h('div', { class: 'cols' });
+    cols.style.setProperty('--lista-w', anchoLista() + 'px');
+    const asa = h('div', { class: 'col-rz', role: 'separator', 'aria-orientation': 'vertical', tabindex: '0', title: 'Arrastra para cambiar el ancho (doble clic: tamaño de siempre)', 'aria-label': 'Ancho de la lista' });
+    const poner = (w) => { w = Math.max(240, Math.min(560, Math.round(w))); cols.style.setProperty('--lista-w', w + 'px'); try { localStorage.setItem('estudio.guiones.lista', String(w)); } catch { /* sin memoria */ } };
+    asa.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); try { asa.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+      const esc = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9, x0 = e.clientX, w0 = anchoLista();
+      document.body.classList.add('cursor-col');
+      const mover = (ev) => poner(w0 + (ev.clientX - x0) / esc);
+      const fin = () => { document.body.classList.remove('cursor-col'); asa.removeEventListener('pointermove', mover); asa.removeEventListener('pointerup', fin); };
+      asa.addEventListener('pointermove', mover); asa.addEventListener('pointerup', fin);
+    });
+    asa.addEventListener('keydown', (e) => { const d = e.key === 'ArrowLeft' ? -20 : e.key === 'ArrowRight' ? 20 : 0; if (d) { e.preventDefault(); poner(anchoLista() + d); } });
+    asa.addEventListener('dblclick', () => poner(340));
+    cols.append(lista(), asa, detalle());
+    return cols;
+  }
+
+  // Ventana flotante de acciones (mismo estilo que el editor): se cierra al hacer clic fuera o con Esc.
+  function menu(botonHtml, titulo, filas) {
+    const pop = h('div', { class: 'pop pop-abajo', hidden: true, role: 'menu', 'aria-label': titulo });
+    const cerrar = () => { pop.hidden = true; document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+    const fuera = (e) => { if (!wrap.contains(e.target)) cerrar(); }; const esc = (e) => { if (e.key === 'Escape') cerrar(); };
+    pop.replaceChildren(...filas(cerrar));
+    const b = h('button', { type: 'button', class: 'btn ghost ib-s', title: titulo, 'aria-label': titulo, 'aria-haspopup': 'menu', html: botonHtml, onclick: () => { if (pop.hidden) { pop.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
+    const wrap = h('div', { class: 'pop-wrap' }, b, pop);
+    return wrap;
+  }
+  const filaMenu = (ico, texto, fn, peligro) => h('button', { type: 'button', role: 'menuitem', class: 'pop-it' + (peligro ? ' peligro' : ''), onclick: fn, html: icon(ico, 18) + `<span>${texto}</span>` });
+
   // ---------- Render ----------
   function render(soloLista) {
     const y = window.scrollY;
@@ -340,7 +383,7 @@ export async function mount(root, { api, toast, h, icon }) {
     root.replaceChildren(
       h('div', { class: 'page-head' }, h('h1', {}, 'Guiones')),
       h('div', { class: 'filters vistas', role: 'tablist', 'aria-label': 'Secciones' }, pestana('guiones', `Temas y guiones (${S.temas.length})`), pestana('referencias', `Referencias (${S.refs.length})`)),
-      ...(S.vista === 'referencias' ? [referencias()] : [semana(), h('div', { class: 'cols' }, lista(), detalle())].filter(Boolean)));
+      ...(S.vista === 'referencias' ? [referencias()] : [semana(), columnas()].filter(Boolean)));
     if (soloLista) { const i = root.querySelector('input[type=search]'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
     else window.scrollTo(0, y);
   }

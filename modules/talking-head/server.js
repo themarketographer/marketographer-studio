@@ -27,7 +27,7 @@ export default async function register({ route, config }) {
     const d = path.join(base, id);
     const meta = readJson(d, 'meta.json', {});
     return { ...meta, id, status: readJson(d, 'status.json'), corriendo: jobs.has(id),
-      analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')) };
+      analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')), tieneAnterior: fs.existsSync(path.join(d, 'alpha_anterior.mp4')) };
   };
 
   function lanzar(id, args, alTerminar) {
@@ -115,6 +115,16 @@ export default async function register({ route, config }) {
     fs.writeFileSync(path.join(dir(params.id), 'plan.json'), JSON.stringify(body, null, 2));
   });
   route.post('/proyectos/:id/analizar', ({ params }) => { lanzar(params.id, ['analizar']); });
+  // Recorte de la persona con más calidad (opcional, tarda más). El anterior se guarda para poder volver.
+  route.post('/proyectos/:id/mejorar-recorte', ({ params }) => { dir(params.id); lanzar(params.id, ['recorte-mejor']); });
+  route.post('/proyectos/:id/recorte-anterior', ({ params }) => {
+    const d = dir(params.id), a = path.join(d, 'alpha.mp4'), b = path.join(d, 'alpha_anterior.mp4'), m = path.join(d, 'alpha_mejorado.mp4');
+    if (jobs.has(params.id)) throw Object.assign(new Error('Hay un proceso en marcha'), { status: 409 });
+    if (!fs.existsSync(b)) throw Object.assign(new Error('No hay un recorte anterior'), { status: 404 });
+    fs.rmSync(m, { force: true }); if (fs.existsSync(a)) fs.renameSync(a, m); fs.renameSync(b, a);
+    for (const f of ['preview.mp4', 'final.mp4']) fs.rmSync(path.join(d, f), { force: true });
+    return resumen(params.id);
+  });
   route.post('/proyectos/:id/replanear', ({ params, body }) => {
     const solo = body && ['zooms', 'titulos'].includes(body.solo) ? ['--solo', body.solo] : [];
     lanzar(params.id, ['plan', ...solo]);

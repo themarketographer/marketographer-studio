@@ -1367,7 +1367,20 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
 
   // ----- Fondo desenfocado -----
-  function panelFondo() {
+  // Recorte de la persona: si la primera versión no quedó bien, se rehace con más calidad (tarda varias veces más).
+  function cardRecorte() {
+    const min = Math.max(1, Math.round(((plan().duration || 60) * 3) / 60));
+    const mejorar = h('button', { type: 'button', class: 'btn gold', onclick: async () => {
+      if (!mejorar.classList.contains('armado')) { mejorar.classList.add('armado'); mejorar.textContent = `¿Seguro? Tarda unos ${min} min`; setTimeout(() => { mejorar.classList.remove('armado'); mejorar.innerHTML = ic('camara', 16) + ' Mejorar el recorte'; }, 4000); return; }
+      await lanzar('mejorar-recorte', {});
+    }, html: ic('camara', 16) + ' Mejorar el recorte' });
+    const volver = S.p && S.p.tieneAnterior ? h('button', { type: 'button', class: 'btn ghost', onclick: async () => {
+      try { await guardarYa(); await api(`${A}/proyectos/${S.p.id}/recorte-anterior`, { method: 'POST' }); toast('Recorte anterior restaurado'); abrir(S.p.id); } catch (e) { toast(e.message); }
+    }, html: ic('reset', 16) + ' Volver al anterior' }) : null;
+    return h('section', { class: 'card' }, h('h2', {}, 'Recorte de la persona'), h('div', { class: 'row-gap' }, mejorar, volver));
+  }
+  const panelFondo = () => [...panelFondoBase(), cardRecorte()];
+  function panelFondoBase() {
     const st = estilo();
     const nota = { titulos: 'El fondo se desenfoca solo mientras hay una palabra grande detrás de ti.', siempre: 'El fondo queda desenfocado todo el video. Tú sales nítido y el fondo se ve como con un lente abierto.', bordes: 'Los bordes se desenfocan y el centro queda nítido, como una viñeta de enfoque.', off: 'Sin desenfoque.' }[st.fondoModo];
     return [
@@ -1991,9 +2004,9 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       if (e.buttons) { sinHover(); return; }
       const g = golpe(e.clientX), r = tl.getBoundingClientRect();
       sinHover();
-      if (g.tipo === 'borde') { tl.style.cursor = 'ew-resize'; const k = todos.indexOf(g.cu); const nodo = capaCortes.children[k]; if (nodo) nodo.classList.add('hover', 'borde-hover'); return; }
+      if (g.tipo === 'borde') { tl.style.cursor = 'col-resize'; const k = todos.indexOf(g.cu); const nodo = capaCortes.children[k]; if (nodo) nodo.classList.add('hover', 'borde-hover'); return; }
       if (g.tipo === 'cuerpo' && g.cu.tipo !== 'texto') {
-        tl.style.cursor = 'pointer';
+        tl.style.cursor = 'ew-resize';
         const k = todos.indexOf(g.cu), nodo = capaCortes.children[k]; if (nodo) nodo.classList.add('hover');
         chip.textContent = ignorado(g.cu) ? 'Cortar' : 'Conservar'; chip.style.left = `${tx((g.cu.s + g.cu.e) / 2)}%`; chip.hidden = false;
         return;
@@ -2010,7 +2023,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       if (guia) capaCortes.append(guia);
       if (g.tipo !== 'vacio') { sel = idDe(g.cu); S.corteSel = sel; pintarCortes(); pintarDetalle(); }
       tl.setPointerCapture(e.pointerId);
-      tl.style.cursor = g.tipo === 'borde' ? 'ew-resize' : g.tipo === 'cuerpo' ? 'pointer' : 'col-resize';
+      document.body.classList.add(g.tipo === 'cuerpo' ? 'cursor-ew' : 'cursor-col');
       const arrancaEdicion = () => { let cu = g.cu; if (cu.tipo === 'auto') cu = aManual(cu); idx = cu.i; base = [...c.manual[idx]]; };
       tl.onpointermove = (ev) => {
         if (!movido && Math.abs(ev.clientX - x0) < 4) return;
@@ -2022,7 +2035,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
           guia.style.left = `${tx(a)}%`; guia.style.width = `${tx(b - a)}%`; return;
         }
         if (g.cu.tipo === 'texto') return;
-        if (!movido) { movido = true; arrancaEdicion(); if (g.tipo === 'cuerpo') tl.style.cursor = 'grabbing'; }
+        if (!movido) { movido = true; arrancaEdicion(); }
         const [a, b] = base;
         if (g.tipo === 'borde') c.manual[idx] = g.lado === 'l' ? [+Math.max(0, Math.min(t, b - 0.05)).toFixed(3), b] : [a, +Math.min(dur, Math.max(t, a + 0.05)).toFixed(3)];
         else { const len = b - a, ini = Math.max(0, Math.min(dur - len, a + (t - t0))); c.manual[idx] = [+ini.toFixed(3), +(ini + len).toFixed(3)]; }
@@ -2030,6 +2043,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       };
       const fin = (ev) => {
         tl.onpointermove = null; tl.onpointerup = null; tl.onpointercancel = null;
+        document.body.classList.remove('cursor-ew', 'cursor-col');
         try { tl.releasePointerCapture(e.pointerId); } catch (_) { /* ya liberado */ }
         if (guia) guia.remove();
         if (g.tipo === 'vacio') {
