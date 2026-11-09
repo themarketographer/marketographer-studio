@@ -11,7 +11,7 @@ export default async function register({ route, config }) {
   const jobs = new Map();
   const pythonPath = () => {
     if (process.env.STUDIO_PY) return process.env.STUDIO_PY;
-    const v = path.join(config.root, '.venv', 'bin', 'python');
+    const v = path.join(config.root, '.venv', ...(process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
     return fs.existsSync(v) ? v : null;
   };
   const dir = (id) => {
