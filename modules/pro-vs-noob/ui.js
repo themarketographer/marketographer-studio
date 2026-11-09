@@ -69,7 +69,49 @@ export async function mount(root, { api, toast, h, icon }) {
   }
 
   // La vista previa usa las tomas originales y las mismas etiquetas, así que lo que ves es lo que se exporta.
+  const turnosDe = (c) => {
+    if (c.turnos && c.turnos.length) return c.turnos;
+    const da = S.p.duraciones?.a || 6, db = S.p.duraciones?.b || 6, k = c.partes || 3, out = [];
+    for (let i = 0; i < k; i++) { out.push({ lado: 'a', desde: (da / k) * i, hasta: (da / k) * (i + 1) }); out.push({ lado: 'b', desde: (db / k) * i, hasta: (db / k) * (i + 1) }); }
+    return out;
+  };
+  // Diálogo: se ve una sola toma a la vez y los turnos se van turnando, como en el video final.
+  function vistaDialogo() {
+    const c = cfg();
+    const va = h('video', { src: S.p.tieneA ? url('a') : '', playsinline: true, preload: 'auto' });
+    const vb = h('video', { src: S.p.tieneB ? url('b') : '', playsinline: true, preload: 'auto' });
+    const nombre = h('b', {}), et = h('div', { class: `pvn-et a-${c.anim}` }, nombre);
+    const panel = (v, l) => h('div', { class: 'pvn-panel pvn-solo', 'data-lado': l }, v);
+    const pa = panel(va, 'a'), pb = panel(vb, 'b');
+    const pantalla = h('div', { class: 'pvn-pantalla pvn-dialogo' }, pa, pb, et, c.titulo ? h('div', { class: 'pvn-tit' }, c.titulo) : null);
+    for (const [x, l] of [[va, 'a'], [vb, 'b']]) x.addEventListener('loadedmetadata', () => { S.p.duraciones = { ...(S.p.duraciones || {}), [l]: x.duration }; });
+    let i = 0, activo = null;
+    const vid = (l) => (l === 'a' ? va : vb);
+    const pintarTurno = (t) => {
+      pa.classList.toggle('on', t.lado === 'a'); pb.classList.toggle('on', t.lado === 'b');
+      nombre.textContent = t.lado === 'a' ? c.a.nombre : c.b.nombre; et.style.setProperty('--col', t.lado === 'a' ? c.a.color : c.b.color);
+      et.style.animation = 'none'; void et.offsetWidth; et.style.animation = '';
+    };
+    const entrar = (k) => {
+      const ts = turnosDe(c), t = ts[k];
+      if (!t) { va.pause(); vb.pause(); i = 0; activo = null; if (ts[0]) pintarTurno(ts[0]); return; }
+      i = k; activo = t; pintarTurno(t);
+      const v = vid(t.lado), otro = vid(t.lado === 'a' ? 'b' : 'a');
+      otro.pause(); v.muted = false; otro.muted = true; v.currentTime = t.desde; v.play().catch(() => {});
+    };
+    const tick = () => { if (activo && !vid(activo.lado).paused && vid(activo.lado).currentTime >= activo.hasta - 0.04) entrar(i + 1); };
+    va.addEventListener('timeupdate', tick); vb.addEventListener('timeupdate', tick);
+    const suena = () => !!(activo && !vid(activo.lado).paused);
+    const alternar = () => { if (suena()) { vid(activo.lado).pause(); return; } if (activo && vid(activo.lado).currentTime > activo.desde + 0.05 && vid(activo.lado).currentTime < activo.hasta - 0.05) vid(activo.lado).play().catch(() => {}); else entrar(0); };
+    const parar = () => { va.pause(); vb.pause(); entrar(-1); };
+    const t0 = turnosDe(c)[0]; if (t0) pintarTurno(t0);
+    const verTurno = (k) => entrar(k);
+    const phone = h('div', { class: 'phone', title: 'Clic para reproducir o pausar', onclick: alternar }, pantalla);
+    return { el: phone, alternar, parar, reiniciar: () => {}, va, vb, suena, verTurno, dialogo: true };
+  }
+
   function vista() {
+    if ((cfg().modo || 'dialogo') === 'dialogo') return vistaDialogo();
     const c = cfg(), lado = c.layout === 'lado';
     const va = h('video', { src: S.p.tieneA ? url('a') : '', playsinline: true, loop: true, preload: 'auto' });
     const vb = h('video', { src: S.p.tieneB ? url('b') : '', playsinline: true, loop: true, preload: 'auto' });
@@ -88,7 +130,7 @@ export async function mount(root, { api, toast, h, icon }) {
     // La toma B sigue a la A para que no se desfasen.
     va.addEventListener('timeupdate', () => { if (!vb.paused && Math.abs(vb.currentTime - va.currentTime) > 0.3) vb.currentTime = va.currentTime; });
     const phone = h('div', { class: 'phone', title: 'Clic para reproducir o pausar', onclick: alternar }, pantalla);
-    return { el: phone, alternar, parar, reiniciar, va, vb };
+    return { el: phone, alternar, parar, reiniciar, va, vb, suena: () => !va.paused };
   }
 
   // ---------- perfiles: todo lo que se configura, guardado con nombre y aplicado en un clic ----------
@@ -142,11 +184,41 @@ export async function mount(root, { api, toast, h, icon }) {
     const color = (label, val, on) => h('label', { class: 'pvn-col' }, h('span', { class: 'lbl' }, label), h('input', { type: 'color', value: val, oninput: (e) => { on(e.target.value); guardar(); } }));
     const txt = (label, val, max, on, ph) => h('label', { class: 'ctl' }, h('span', { class: 'lbl' }, label), h('input', { value: val, maxlength: max, placeholder: ph || '', oninput: (e) => on(e.target.value) }));
     const interruptor = (label, val, on) => h('button', { type: 'button', role: 'switch', 'aria-checked': String(val), class: 'sw-row', onclick: on }, h('span', { class: 'sw' + (val ? ' on' : ''), 'aria-hidden': 'true' }, h('i')), label);
+    // Turnos del diálogo: de qué toma sale cada tramo y de qué segundo a qué segundo.
+    const editorTurnos = () => {
+      const ts = c.turnos || (c.turnos = []);
+      const fila = (t, k) => {
+        const lado = t.lado, col_ = lado === 'a' ? c.a.color : c.b.color;
+        const num = (campo) => h('input', { type: 'number', class: 'pvn-seg', min: 0, step: 0.1, value: Number(t[campo]).toFixed(1), 'aria-label': campo === 'desde' ? 'Desde' : 'Hasta', onchange: (e) => { t[campo] = Math.max(0, Number(e.target.value) || 0); guardar(); } });
+        const quitar = h('button', { type: 'button', class: 'pvn-ic borrar', title: 'Quitar turno (doble clic)', html: trazo('<path d="M6 6l12 12M18 6L6 18"/>') });
+        dobleClic(quitar, () => cambiar(() => ts.splice(k, 1)));
+        return h('div', { class: 'pvn-turno' },
+          h('button', { type: 'button', class: 'pvn-lado', style: `--col:${col_}`, title: 'Cambiar de toma', onclick: () => cambiar(() => { t.lado = lado === 'a' ? 'b' : 'a'; }) }, lado === 'a' ? c.a.nombre : c.b.nombre),
+          num('desde'), h('span', { class: 'pvn-flecha' }, '→'), num('hasta'),
+          h('button', { type: 'button', class: 'pvn-ic', title: 'Ver este turno', onclick: () => v.verTurno(k), html: svg(D.play, 16) }),
+          h('button', { type: 'button', class: 'pvn-ic', title: 'Subir', disabled: k === 0, onclick: () => cambiar(() => { [ts[k - 1], ts[k]] = [ts[k], ts[k - 1]]; }), html: trazo('<path d="M6 15l6-6 6 6"/>') }),
+          h('button', { type: 'button', class: 'pvn-ic', title: 'Bajar', disabled: k === ts.length - 1, onclick: () => cambiar(() => { [ts[k + 1], ts[k]] = [ts[k], ts[k + 1]]; }), html: trazo('<path d="M6 9l6 6 6-6"/>') }),
+          quitar);
+      };
+      const auto = h('div', { class: 'pvn-auto' },
+        h('span', { class: 'lbl' }, 'Alternar en'),
+        h('button', { type: 'button', class: 'pvn-ic', title: 'Menos partes', onclick: () => cambiar(() => { c.partes = Math.max(1, (c.partes || 3) - 1); }), html: trazo('<path d="M5 12h14"/>') }),
+        h('output', {}, `${c.partes || 3} partes`),
+        h('button', { type: 'button', class: 'pvn-ic', title: 'Más partes', onclick: () => cambiar(() => { c.partes = Math.min(12, (c.partes || 3) + 1); }), html: trazo('<path d="M12 5v14M5 12h14"/>') }),
+        h('button', { type: 'button', class: 'btn gold sm', disabled: !listo, onclick: () => cambiar(() => { c.turnos = turnosDe({ ...c, turnos: [] }).map((t) => ({ lado: t.lado, desde: +t.desde.toFixed(2), hasta: +t.hasta.toFixed(2) })); }) }, 'Armar'));
+      const agregar = h('button', { type: 'button', class: 'btn ghost sm', disabled: !listo, onclick: () => cambiar(() => {
+        const ult = ts[ts.length - 1], lado = ult && ult.lado === 'a' ? 'b' : 'a', fin = ts.filter((x) => x.lado === lado).reduce((m, x) => Math.max(m, x.hasta), 0);
+        ts.push({ lado, desde: +fin.toFixed(2), hasta: +(fin + 3).toFixed(2) });
+      }) }, 'Añadir turno');
+      return h('div', { class: 'pvn-turnos' }, auto, ...ts.map(fila), agregar);
+    };
     // Tres grupos en pestañas: de dónde salen las tomas, cómo se rotulan y cómo suenan.
     const PEST = {
       tomas: () => [
         h('div', { class: 'pvn-tomas' }, caja('a', c.a.nombre || 'Noob'), caja('b', c.b.nombre || 'Pro')),
-        seg('Disposición', [['apilado', 'Arriba y abajo'], ['lado', 'Lado a lado']], c.layout, (x) => cambiar(() => { c.layout = x; })),
+        seg('Formato', [['dialogo', 'Diálogo'], ['dividida', 'Pantalla dividida']], c.modo || 'dialogo', (x) => cambiar(() => { c.modo = x; })),
+        (c.modo || 'dialogo') === 'dividida' ? seg('Disposición', [['apilado', 'Arriba y abajo'], ['lado', 'Lado a lado']], c.layout, (x) => cambiar(() => { c.layout = x; })) : null,
+        (c.modo || 'dialogo') === 'dialogo' ? editorTurnos() : null,
       ],
       etiquetas: () => [
         h('div', { class: 'pvn-dos' },
@@ -159,7 +231,7 @@ export async function mount(root, { api, toast, h, icon }) {
         txt('Título abajo', c.titulo, 60, (x) => { c.titulo = x; guardar(); }, 'Opcional'),
         interruptor('Insignia VS', c.vs, () => cambiar(() => { c.vs = !c.vs; })),
       ],
-      sonido: () => [
+      sonido: () => (c.modo || 'dialogo') === 'dialogo' ? [h('p', { class: 'hint' }, 'Cada turno suena con su propio audio.')] : [
         seg('Audio', [['b', 'Segunda'], ['a', 'Primera'], ['mezcla', 'Mezcla']], c.audio, (x) => cambiar(() => { c.audio = x; })),
         seg('Duración', [['min', 'La más corta'], ['a', 'Primera'], ['b', 'Segunda']], c.duracion, (x) => cambiar(() => { c.duracion = x; })),
       ],
@@ -170,8 +242,8 @@ export async function mount(root, { api, toast, h, icon }) {
 
     const tr = (d, tit, fn, cls = '') => h('button', { type: 'button', class: 'pvn-tr ' + cls, title: tit, 'aria-label': tit, disabled: !listo, onclick: fn, html: svg(d) });
     const bPlay = tr(D.play, 'Reproducir (espacio)', v.alternar, 'pvn-play');
-    const sync = () => { const suena = !v.va.paused; bPlay.innerHTML = svg(suena ? D.pausa : D.play); bPlay.title = suena ? 'Pausa (espacio)' : 'Reproducir (espacio)'; bPlay.classList.toggle('sonando', suena); };
-    v.va.addEventListener('play', sync); v.va.addEventListener('pause', sync);
+    const sync = () => { const suena = v.suena(); bPlay.innerHTML = svg(suena ? D.pausa : D.play); bPlay.title = suena ? 'Pausa (espacio)' : 'Reproducir (espacio)'; bPlay.classList.toggle('sonando', suena); };
+    for (const x of [v.va, v.vb]) { x.addEventListener('play', sync); x.addEventListener('pause', sync); }
     S.alternar = listo ? v.alternar : null;
     const transporte = h('div', { class: 'pvn-transporte', role: 'group', 'aria-label': 'Reproducción' }, tr(D.inicio, 'Desde el principio', () => { v.parar(); v.alternar(); }), bPlay, tr(D.parar, 'Parar', v.parar));
 

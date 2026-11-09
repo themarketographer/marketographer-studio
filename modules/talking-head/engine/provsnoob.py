@@ -1,4 +1,4 @@
-"""Pro vs Noob: dos tomas en la misma pantalla vertical, cada una con su etiqueta animada.
+"""Pro vs Noob: un diálogo (las dos tomas se van turnando a pantalla completa, cada turno con su etiqueta animada) o, si se prefiere, pantalla dividida.
 
 Reutiliza el texto, las entradas y la mezcla de audio del resto del motor."""
 import subprocess
@@ -60,6 +60,8 @@ def _poner(dst, spr, cx, cy, t, t0, anim):
 def run(proj):
     proj = Path(proj)
     cfg = load(proj, "pvn.json", {})
+    if cfg.get("modo", "dialogo") == "dialogo":
+        return run_dialogo(proj, cfg)
     style = merge_style(None)
     A, B = cfg.get("a", {}), cfg.get("b", {})
     nombreA, nombreB = (A.get("nombre") or "NOOB"), (B.get("nombre") or "PRO")
@@ -140,6 +142,105 @@ def run(proj):
         af = ["-map", "0:v", "-map", "2:a:0"]
     try:
         subprocess.run(base + af + ["-t", f"{dur:.3f}", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(fin)], check=True)
+    except subprocess.CalledProcessError:  # alguna toma sin audio: se entrega el video sin sonido
+        subprocess.run([ff, "-v", "error", "-y", "-i", str(out_tmp), "-c", "copy", "-movflags", "+faststart", str(fin)], check=True)
+    out_tmp.unlink(missing_ok=True)
+    status(proj, "listo", 100, "final.mp4")
+
+
+def turnos_auto(da, db, partes=3):
+    """Si no se marcó nada: cada toma se parte en partes iguales y se intercalan (primera, segunda, primera, segunda...)."""
+    partes = max(1, min(int(partes or 3), 12))
+    ta, tb = da / partes, db / partes
+    out = []
+    for k in range(partes):
+        out.append({"lado": "a", "desde": k * ta, "hasta": (k + 1) * ta})
+        out.append({"lado": "b", "desde": k * tb, "hasta": (k + 1) * tb})
+    return out
+
+
+def run_dialogo(proj, cfg):
+    """Cada turno es un tramo de una toma a pantalla completa; los turnos van uno tras otro y suenan con su propio audio."""
+    style = merge_style(None)
+    A, B = cfg.get("a", {}), cfg.get("b", {})
+    nom = {"a": (A.get("nombre") or "NOOB"), "b": (B.get("nombre") or "PRO")}
+    col = {"a": (A.get("color") or "#ff4d4d"), "b": (B.get("color") or "#2fd27a")}
+    anim = cfg.get("anim", "pop")
+    arch = {"a": proj / "a.mp4", "b": proj / "b.mp4"}
+    dur_t = {"a": probe(arch["a"])[3], "b": probe(arch["b"])[3]}
+    turnos = []
+    for t in cfg.get("turnos") or []:
+        l = t.get("lado")
+        if l not in ("a", "b"):
+            continue
+        d0 = max(0.0, min(float(t.get("desde", 0)), dur_t[l]))
+        d1 = max(d0 + 0.2, min(float(t.get("hasta", d0 + 3)), dur_t[l]))
+        if d1 - d0 >= 0.2:
+            turnos.append({"lado": l, "desde": d0, "hasta": d1})
+    if not turnos:
+        turnos = turnos_auto(dur_t["a"], dur_t["b"], cfg.get("partes", 3))
+    # tope de 180 s en total
+    total, rec = 0.0, []
+    for t in turnos:
+        d = t["hasta"] - t["desde"]
+        if total + d > 180.0:
+            d = 180.0 - total
+            if d < 0.2:
+                break
+            t = {**t, "hasta": t["desde"] + d}
+        rec.append(t)
+        total += d
+    turnos = rec
+    sprites = {l: _etiqueta(nom[l], col[l], style) for l in ("a", "b")}
+    tit = None
+    if (cfg.get("titulo") or "").strip():
+        rgb, a = R.title_sprite({"text": cfg["titulo"].strip(), "size": "M", "color": "text", "pxf": 0.04}, style, W, H, {"accent": R.hex_rgb(col["b"]), "text": (255, 255, 255)})
+        tit = R.with_box(rgb, a, 0.04 * H)
+    caps = {l: cv2.VideoCapture(str(arch[l])) for l in ("a", "b")}
+    fps = {l: caps[l].get(cv2.CAP_PROP_FPS) or 30 for l in ("a", "b")}
+    n_total = sum(max(1, int(round((t["hasta"] - t["desde"]) * FPS))) for t in turnos)
+    out_tmp = proj / "_pvn.mp4"
+    enc = subprocess.Popen([ffmpeg_exe(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
+                            "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p", str(out_tmp)], stdin=subprocess.PIPE)
+    hecho, t_global = 0, 0.0
+    for t in turnos:
+        l, cap = t["lado"], caps[t["lado"]]
+        n = max(1, int(round((t["hasta"] - t["desde"]) * FPS)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(t["desde"] * fps[l]))
+        ia, fr = int(t["desde"] * fps[l]) - 1, None
+        spr = sprites[l]
+        pos = (40 + spr[1].shape[1] / 2, 40 + spr[1].shape[0] / 2)
+        for k in range(n):
+            src_t = t["desde"] + k / FPS
+            na = int(src_t * fps[l])
+            while ia < na:
+                ok, f = cap.read()
+                if not ok:
+                    break
+                fr, ia = f, ia + 1
+            lienzo = _cubrir(fr, W, H).copy() if fr is not None else np.full((H, W, 3), 12, np.uint8)
+            _poner(lienzo, spr, pos[0], pos[1], k / FPS, 0.1, anim)  # la etiqueta entra al empezar cada turno
+            if tit:
+                _poner(lienzo, tit, W / 2, H * 0.93, t_global + k / FPS, 0.3, "deslizar")
+            enc.stdin.write(memoryview(lienzo))
+            hecho += 1
+            if hecho % 15 == 0:
+                status(proj, "render", 5 + 85 * hecho / max(n_total, 1), "Montando el video")
+        t_global += n / FPS
+    enc.stdin.close()
+    enc.wait()
+    for c in caps.values():
+        c.release()
+    # Audio: el de cada turno, pegado en orden.
+    ff = ffmpeg_exe()
+    fin = proj / "final.mp4"
+    partes, ent = [], ["-i", str(out_tmp), "-i", str(arch["a"]), "-i", str(arch["b"])]
+    for i, t in enumerate(turnos):
+        idx = 1 if t["lado"] == "a" else 2
+        partes.append(f"[{idx}:a:0]atrim=start={t['desde']:.3f}:end={t['hasta']:.3f},asetpts=PTS-STARTPTS,aresample=44100[a{i}]")
+    fc = ";".join(partes) + ";" + "".join(f"[a{i}]" for i in range(len(turnos))) + f"concat=n={len(turnos)}:v=0:a=1[m]"
+    try:
+        subprocess.run([ff, "-v", "error", "-y", *ent, "-filter_complex", fc, "-map", "0:v", "-map", "[m]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(fin)], check=True)
     except subprocess.CalledProcessError:  # alguna toma sin audio: se entrega el video sin sonido
         subprocess.run([ff, "-v", "error", "-y", "-i", str(out_tmp), "-c", "copy", "-movflags", "+faststart", str(fin)], check=True)
     out_tmp.unlink(missing_ok=True)

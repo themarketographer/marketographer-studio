@@ -29,7 +29,7 @@ function doble(h, { clase, icono, texto, aviso, accion }) {
 }
 
 export async function mount(root, { api, toast, h, icon }) {
-  const S = { clases: [], temas: [], guiones: [], formatos: [], refs: [], vista: 'guiones', rq: '', rEstado: 'todas', rRobar: '', sel: null, formato: 'talking-head', filtro: 'todos', q: '', borrador: '' };
+  const S = { clases: [], temas: [], guiones: [], formatos: [], refs: [], vista: 'guiones', rq: '', rEstado: 'todas', rRobar: '', tab: 'guion', sel: null, formato: 'talking-head', filtro: 'todos', q: '', borrador: '' };
 
   async function cargar() {
     [S.clases, S.temas, S.guiones, S.formatos, S.refs] = await Promise.all([
@@ -50,46 +50,44 @@ export async function mount(root, { api, toast, h, icon }) {
     await cargar(); render();
   }
 
-  // ---------- Esta semana ----------
+  // ---------- Esta semana (solo fichas, sin texto) ----------
   function semana() {
     const en = S.temas.filter((t) => t.semana);
-    const hechos = en.filter((t) => ['grabado', 'publicado'].includes(t.estado)).length;
-    const pct = en.length ? Math.round((hechos / en.length) * 100) : 0;
-    return h('section', { class: 'week', 'aria-label': 'Esta semana' },
-      h('div', { class: 'week-top' },
-        h('h2', {}, 'Esta semana'),
-        h('span', { class: 'week-count' }, en.length ? `${hechos} de ${en.length} grabados` : 'Elige hasta 3 temas con la estrella')),
-      h('div', { class: 'bar', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100 }, h('i', { style: `width:${pct}%` })),
-      h('div', { class: 'week-list' }, en.map((t) =>
-        h('button', { class: 'chip' + (t.id === S.sel ? ' on' : ''), onclick: () => { S.sel = t.id; render(); } },
-          h('span', { class: 'dot ' + t.estado }), t.titulo))));
+    if (!en.length) return null;
+    return h('div', { class: 'week-list', 'aria-label': 'Esta semana' },
+      h('span', { class: 'week-ic', html: icon('star', 16) }),
+      en.map((t) => h('button', { class: 'chip' + (t.id === S.sel ? ' on' : ''), onclick: () => { S.sel = t.id; S.borrador = ''; render(); } }, h('span', { class: 'dot ' + t.estado }), t.titulo)));
   }
 
-  // ---------- Lista de temas ----------
+  // ---------- Lista de temas con captura rápida ----------
+  // Una sola caja: escribes una idea y Enter. Si pegas un guion largo, el primer renglón es el título y el resto queda como guion.
   function lista() {
-    const filtrados = S.temas.filter((t) =>
-      (S.filtro === 'todos' || t.estado === S.filtro) && t.titulo.toLowerCase().includes(S.q.toLowerCase()));
-    const nuevo = h('input', { type: 'text', placeholder: 'Escribe un tema nuevo', 'aria-label': 'Nuevo tema' });
+    const filtrados = S.temas.filter((t) => (S.filtro === 'todos' || t.estado === S.filtro) && t.titulo.toLowerCase().includes(S.q.toLowerCase()));
+    const caja = h('textarea', { class: 'cap-in', rows: 1, placeholder: 'Anota una idea o pega un guion', 'aria-label': 'Nueva idea o guion' });
+    const ajusta = () => { caja.style.height = 'auto'; caja.style.height = Math.min(caja.scrollHeight, 180) + 'px'; };
+    caja.addEventListener('input', ajusta);
     const agregar = async () => {
-      const titulo = nuevo.value.trim(); if (!titulo) return;
-      const t = await api('/guiones/temas', { method: 'POST', body: { titulo } });
-      await cargar(); S.sel = t.id; render();
+      const txt = caja.value.trim(); if (!txt) return;
+      const lineas = txt.split('\n').map((x) => x.trim()).filter(Boolean);
+      const largo = txt.length > 160 || lineas.length > 3;
+      const titulo = (lineas[0] || txt).slice(0, 80);
+      const t = await api('/guiones/temas', { method: 'POST', body: { titulo, estado: largo ? 'guion' : 'idea' } });
+      if (largo) await api('/guiones/guiones', { method: 'POST', body: { temaId: t.id, formato: S.formato, texto: txt } });
+      await cargar(); S.sel = t.id; S.borrador = ''; S.tab = 'guion'; render(); toast(largo ? 'Guion guardado' : 'Idea guardada');
     };
-    nuevo.addEventListener('keydown', (e) => e.key === 'Enter' && agregar());
+    caja.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregar(); } });
     return h('aside', { class: 'col-list' },
-      h('div', { class: 'add' }, nuevo, h('button', { class: 'btn gold', onclick: agregar, 'aria-label': 'Agregar tema', html: icon('plus') })),
-      h('button', { class: 'btn ghost wide', onclick: abrirClases, html: icon('folder') + ' Traer temas de mis clases' }),
-      h('input', { type: 'search', placeholder: 'Buscar', 'aria-label': 'Buscar temas', value: S.q, oninput: (e) => { S.q = e.target.value; render(true); } }),
+      h('div', { class: 'cap' }, caja, h('button', { class: 'btn gold', onclick: agregar, 'aria-label': 'Guardar', title: 'Guardar (Enter)', html: icon('plus') })),
+      h('div', { class: 'row-gap-s' },
+        h('input', { type: 'search', placeholder: 'Buscar', 'aria-label': 'Buscar temas', value: S.q, oninput: (e) => { S.q = e.target.value; render(true); } }),
+        h('button', { class: 'btn ghost ib-s', onclick: abrirClases, title: 'Traer temas de mis clases', 'aria-label': 'Traer temas de mis clases', html: icon('folder') })),
       h('div', { class: 'filters', role: 'group', 'aria-label': 'Filtrar por estado' },
-        [['todos', 'Todos'], ...ESTADOS].map(([id, n]) =>
-          h('button', { class: 'f' + (S.filtro === id ? ' on' : ''), 'aria-pressed': S.filtro === id, onclick: () => { S.filtro = id; render(); } }, n))),
+        [['todos', 'Todos'], ...ESTADOS].map(([id, n]) => h('button', { class: 'f' + (S.filtro === id ? ' on' : ''), 'aria-pressed': S.filtro === id, onclick: () => { S.filtro = id; render(); } }, n))),
       h('ul', { class: 'temas' }, filtrados.length ? filtrados.map((t) =>
         h('li', {}, h('button', { class: 'tema' + (t.id === S.sel ? ' on' : ''), onclick: () => { S.sel = t.id; S.borrador = ''; render(); } },
-          h('span', { class: 'tema-t' }, t.semana ? h('span', { class: 'star', html: icon('star', 14) }) : null, t.titulo),
-          h('span', { class: 'tema-m' },
-            h('span', { class: 'tag ' + t.estado }, etiqueta(t.estado)),
-            S.formatos.filter((f) => guionDe(t.id, f.id)).map((f) => h('span', { class: 'mini' }, f.nombre)))))
-      ) : h('li', { class: 'vacio' }, 'Sin temas aquí todavía.')));
+          h('span', { class: 'tema-t' }, h('span', { class: 'dot ' + t.estado }), t.semana ? h('span', { class: 'star', html: icon('star', 14) }) : null, t.titulo),
+          S.formatos.some((f) => guionDe(t.id, f.id)) ? h('span', { class: 'tema-m' }, S.formatos.filter((f) => guionDe(t.id, f.id)).map((f) => h('span', { class: 'mini' }, f.nombre))) : null))
+      ) : h('li', { class: 'vacio' }, 'Nada por aquí')));
   }
 
   // Título editable que crece con su contenido (un input recortaría los títulos largos).
@@ -106,91 +104,85 @@ export async function mount(root, { api, toast, h, icon }) {
   // ---------- Detalle ----------
   function detalle() {
     const t = tema();
-    if (!t) return h('section', { class: 'col-main empty' },
-      h('h2', {}, 'Elige un tema para empezar'),
-      h('p', {}, 'Cada tema se convierte en un guion en el formato que prefieras. Si no tienes ideas, trae las preguntas de tus clases.'),
-      h('button', { class: 'btn gold', onclick: abrirClases, html: icon('folder') + ' Traer temas de mis clases' }));
+    if (!t) return h('section', { class: 'col-main empty' }, h('div', { class: 'empty-ic', html: icon('pen', 34) }), h('h2', {}, 'Anota una idea'));
 
-    const clase = S.clases.find((c) => c.id === t.claseId);
-    const f = S.formatos.find((x) => x.id === S.formato);
+    const f = S.formatos.find((x) => x.id === S.formato) || S.formatos[0];
     const g = guionDe(t.id, S.formato);
     if (S.borrador === '' && g) S.borrador = g.texto;
-    const area = h('textarea', { rows: 12, placeholder: 'Pega aquí el guion que te devolvió Claude', 'aria-label': 'Guion', oninput: (e) => (S.borrador = e.target.value) });
+    const area = h('textarea', { class: 'guion-area', rows: 16, placeholder: 'Pega o escribe el guion', 'aria-label': 'Guion', spellcheck: 'true' });
     area.value = S.borrador;
-    const tiempo = h('small', { class: 'lectura', 'aria-live': 'polite' });
-    const pintarTiempo = () => {
-      const { palabras, seg } = minutosLectura(area.value);
-      tiempo.textContent = palabras ? `${palabras} palabras · se lee en ${seg} s a ritmo normal${seg > 60 ? ' (más de un minuto)' : ''}` : 'Escribe o pega el guion y te digo cuánto dura.';
+    const meta = h('span', { class: 'meta', 'aria-live': 'polite' });
+    const estado = h('span', { class: 'estado-g' });
+    const pintarMeta = () => { const { palabras, seg } = minutosLectura(area.value); meta.textContent = palabras ? `${palabras} palabras · ${seg} s` : ''; };
+    let base = g ? g.texto : '', tAuto = 0, guardando = false;
+    const guardar = async (silencio) => {
+      const txt = area.value.trim(); if (!txt || txt === base.trim() || guardando) return;
+      guardando = true; clearTimeout(tAuto); estado.textContent = 'Guardando…';
+      try {
+        const r = await api('/guiones/guiones', { method: 'POST', body: { id: (guionDe(t.id, S.formato) || {}).id, temaId: t.id, formato: S.formato, texto: txt } });
+        base = txt; S.borrador = txt;
+        const ix = S.guiones.findIndex((x) => x.id === r.id); if (ix >= 0) S.guiones[ix] = r; else S.guiones.push(r);
+        if (t.estado === 'idea') { t.estado = 'guion'; await api('/guiones/temas', { method: 'POST', body: { id: t.id, estado: 'guion' } }); }
+        estado.textContent = 'Guardado'; setTimeout(() => { if (estado.textContent === 'Guardado') estado.textContent = ''; }, 1800);
+        if (!silencio) render();
+      } catch (e) { estado.textContent = ''; toast(e.message); } finally { guardando = false; }
     };
-    const base = g ? g.texto : '';
-    const sin = h('span', { class: 'sin-guardar', hidden: true }, 'Sin guardar');
-    const marcar = () => { sin.hidden = area.value.trim() === base.trim(); };
-    const guardar = async () => {
-      if (!S.borrador.trim()) return toast('Pega un guion primero.');
-      await api('/guiones/guiones', { method: 'POST', body: { id: g?.id, temaId: t.id, formato: S.formato, texto: S.borrador.trim() } });
-      if (t.estado === 'idea') await api('/guiones/temas', { method: 'POST', body: { id: t.id, estado: 'guion' } });
-      await cargar(); render(); toast('Guion guardado.');
+    // Se guarda solo: un momento después de dejar de escribir o pegar.
+    area.addEventListener('input', () => { S.borrador = area.value; pintarMeta(); estado.textContent = 'Sin guardar'; clearTimeout(tAuto); tAuto = setTimeout(() => guardar(true), 1200); });
+    area.addEventListener('blur', () => guardar(true));
+    area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); guardar(false); } });
+    pintarMeta();
+
+    const estructura = h('select', { class: 'sel-s', 'aria-label': 'Estructura de partida', onchange: (e) => {
+      const p = PLANTILLAS.find(([n]) => n === e.target.value); e.target.value = ''; if (!p) return;
+      if (area.value.trim() && !confirm('Reemplazar el texto por esta estructura?')) return;
+      area.value = p[1]; S.borrador = p[1]; pintarMeta(); guardar(true); area.focus();
+    } }, h('option', { value: '' }, 'Estructura…'), PLANTILLAS.map(([n]) => h('option', { value: n }, n)));
+    const bar = h('div', { class: 'tb' },
+      h('div', { class: 'formats-s', role: 'tablist', 'aria-label': 'Formato' }, S.formatos.map((x) =>
+        h('button', { role: 'tab', class: 'f' + (x.id === S.formato ? ' on' : ''), 'aria-selected': x.id === S.formato, title: x.resumen, onclick: async () => { await guardar(true); S.formato = x.id; S.borrador = ''; render(); } },
+          x.nombre, guionDe(t.id, x.id) ? h('i', { class: 'dot guion' }) : null))),
+      h('div', { class: 'tb-acc' }, estructura,
+        h('button', { class: 'btn ghost sm', title: 'Copia la petición lista para pegar en Claude', onclick: async () => { const r = await api('/guiones/prompt', { method: 'POST', body: { temaId: t.id, formato: S.formato } }); copiar(r.prompt, 'Prompt copiado'); }, html: icon('copy') + ' Pedir a Claude' }),
+        g ? h('button', { class: 'btn dark sm', onclick: () => teleprompter(area.value || g.texto), html: icon('play') + ' Grabar' }) : null));
+
+    const PEST = {
+      guion: () => [bar, area,
+        h('div', { class: 'pie-g' }, meta, estado, h('span', { class: 'grow' }),
+          g ? h('button', { class: 'btn ghost sm', onclick: () => copiar(area.value, 'Guion copiado'), html: icon('copy') + ' Copiar' }) : null,
+          g ? doble(h, { clase: 'btn ghost sm', icono: icon('trash'), texto: 'Borrar', aviso: '¿Seguro?', accion: async () => { await api('/guiones/guiones/' + g.id, { method: 'DELETE' }); S.borrador = ''; await cargar(); render(); } }) : null)],
+      notas: () => [
+        h('label', { class: 'field' }, 'Ángulo', h('input', { value: t.angulo || '', placeholder: 'Para quién o desde dónde', onchange: (e) => guardarTema({ angulo: e.target.value }) })),
+        h('label', { class: 'field' }, 'Notas', h('textarea', { class: 'notas-area', rows: 10, placeholder: 'Ideas sueltas, frases, datos, copy', onchange: (e) => guardarTema({ notas: e.target.value }) }, t.notas || ''))],
+      refs: () => {
+        const rs = S.refs.filter((r) => r.temaId === t.id);
+        const link = h('input', { type: 'text', placeholder: 'Pega un link y Enter', 'aria-label': 'Link de referencia' });
+        link.addEventListener('keydown', async (e) => {
+          if (e.key !== 'Enter') return; e.preventDefault();
+          const urls = link.value.match(/https?:\/\/\S+/g) || []; if (!urls.length) return toast('Pega un link');
+          for (const url of urls) { try { await api('/guiones/referencias', { method: 'POST', body: { url, temaId: t.id } }); } catch (er) { toast(er.message); } }
+          await cargar(); render();
+        });
+        return [link, rs.length ? h('ul', { class: 'refs' }, rs.map(tarjetaRef)) : null];
+      },
     };
-    area.addEventListener('input', () => { pintarTiempo(); marcar(); });
-    area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); guardar(); } });
-    pintarTiempo();
-    const plantillas = h('div', { class: 'plantillas' }, h('small', {}, 'Estructura de partida:'),
-      PLANTILLAS.map(([n, tx]) => h('button', { type: 'button', class: 'f', title: 'Inserta el esqueleto con gancho, desarrollo y cierre', onclick: () => {
-        if (area.value.trim() && area.dataset.plantilla !== n) { area.dataset.plantilla = n; toast('Ya hay texto. Pulsa otra vez para reemplazarlo.'); setTimeout(() => delete area.dataset.plantilla, 4000); return; }
-        area.value = tx; S.borrador = tx; delete area.dataset.plantilla; pintarTiempo(); marcar(); area.focus();
-      } }, n)));
+    const nRefs = S.refs.filter((r) => r.temaId === t.id).length;
+    const tabs = h('div', { class: 'sec-tabs', role: 'tablist' }, [['guion', 'Guion'], ['notas', 'Notas'], ['refs', nRefs ? `Referencias (${nRefs})` : 'Referencias']].map(([id, n]) =>
+      h('button', { type: 'button', role: 'tab', class: 'sec-tab' + (S.tab === id ? ' on' : ''), 'aria-selected': String(S.tab === id), onclick: async () => { await guardar(true); S.tab = id; render(); } }, n)));
+    const estados = h('div', { class: 'estados', role: 'group', 'aria-label': 'Estado' }, ESTADOS.map(([id, n]) =>
+      h('button', { type: 'button', class: 'est' + (t.estado === id ? ' on' : ''), 'aria-pressed': String(t.estado === id), title: n, onclick: () => guardarTema({ estado: id }) }, h('span', { class: 'dot ' + id }), n)));
 
     return h('section', { class: 'col-main' },
       h('div', { class: 'row-between' },
         tituloEl(t),
-        h('button', { class: 'btn ghost' + (t.semana ? ' on' : ''), 'aria-pressed': !!t.semana, onclick: () => {
-          const ya = S.temas.filter((x) => x.semana && x.id !== t.id).length;
-          if (!t.semana && ya >= 3) return toast('Ya tienes 3 temas esta semana. Quita uno primero.');
-          guardarTema({ semana: !t.semana });
-        }, html: icon('star') + (t.semana ? ' En esta semana' : ' Agregar a esta semana') })),
-      h('p', { class: 'sub' }, clase ? `De la clase: ${clase.titulo}` : 'Sin clase asociada'),
-      h('label', { class: 'field' }, 'Ángulo (opcional)',
-        h('input', { value: t.angulo || '', placeholder: 'Ej: dirigido a fotógrafos de bodas', onchange: (e) => guardarTema({ angulo: e.target.value }) })),
-      h('label', { class: 'field' }, 'Notas e ideas (opcional)',
-        h('textarea', { rows: 3, placeholder: 'Apuntes sueltos, frases que te gustaron, ejemplos, datos. Se incluyen en el prompt.', onchange: (e) => guardarTema({ notas: e.target.value }) }, t.notas || '')),
-      refsDelTema(t),
-
-      h('div', { class: 'formats', role: 'tablist', 'aria-label': 'Formato' }, S.formatos.map((x) =>
-        h('button', { role: 'tab', class: 'format' + (x.id === S.formato ? ' on' : ''), 'aria-selected': x.id === S.formato,
-          onclick: () => { S.formato = x.id; S.borrador = ''; render(); } },
-          h('strong', {}, x.nombre), h('small', {}, x.resumen), guionDe(t.id, x.id) ? h('span', { class: 'ok', html: icon('check', 14) + ' Listo' }) : null))),
-
-      h('div', { class: 'step' },
-        h('div', { class: 'step-n' }, '1'),
-        h('div', {}, h('h3', {}, `Pide el guion de ${f.nombre}`),
-          h('p', {}, `${f.duracion}. Copia el prompt y pégalo en un chat de Claude con tus skills.`),
-          h('button', { class: 'btn gold', onclick: async () => {
-            const r = await api('/guiones/prompt', { method: 'POST', body: { temaId: t.id, formato: S.formato } });
-            copiar(r.prompt, 'Prompt copiado. Pégalo en Claude.');
-          }, html: icon('copy') + ' Copiar prompt' }))),
-
-      h('div', { class: 'step' },
-        h('div', { class: 'step-n' }, '2'),
-        h('div', { class: 'grow' }, h('h3', {}, 'Guarda el guion final'),
-          h('p', {}, 'Las palabras entre *asteriscos* saldrán grandes en pantalla. Lo que va entre [corchetes] son indicaciones de edición.'),
-          plantillas, area, tiempo,
-          h('div', { class: 'actions' },
-            h('button', { class: 'btn gold', title: 'Atajo: Cmd o Ctrl + Enter', onclick: guardar, html: icon('check') + ' Guardar guion' }), sin,
-            g ? h('button', { class: 'btn ghost', onclick: () => copiar(g.texto, 'Guion copiado.'), html: icon('copy') + ' Copiar' }) : null,
-            g ? doble(h, { clase: 'btn ghost', icono: icon('trash'), texto: 'Borrar guion', aviso: '¿Seguro? Pulsa otra vez', accion: async () => { await api('/guiones/guiones/' + g.id, { method: 'DELETE' }); S.borrador = ''; await cargar(); render(); } }) : null))),
-
-      g ? h('div', { class: 'step' },
-        h('div', { class: 'step-n' }, '3'),
-        h('div', {}, h('h3', {}, 'Grábalo'),
-          h('p', {}, S.formato === 'talking-head' ? 'Modo grabación: texto grande que se desplaza solo. Al subir el video, en Talking Head abre el paso Texto y elige este guion para corregir la transcripción.' : 'Modo grabación: texto grande que se desplaza solo, para leer mirando a cámara.'),
-          h('button', { class: 'btn dark', onclick: () => teleprompter(g.texto), html: icon('play') + ' Abrir modo grabación' }))) : null,
-
-      h('div', { class: 'row-between foot' },
-        h('label', { class: 'field inline' }, 'Estado',
-          h('select', { onchange: (e) => guardarTema({ estado: e.target.value }) }, ESTADOS.map(([id, n]) => h('option', { value: id, selected: t.estado === id }, n)))),
-        doble(h, { clase: 'btn danger', icono: icon('trash'), texto: 'Borrar tema', aviso: '¿Seguro? Pulsa otra vez', accion: async () => {
-          await api('/guiones/temas/' + t.id, { method: 'DELETE' }); S.sel = null; S.borrador = ''; await cargar(); render();
-        } })));
+        h('div', { class: 'row-gap-s' },
+          h('button', { class: 'btn ghost ib-s' + (t.semana ? ' on' : ''), 'aria-pressed': !!t.semana, title: t.semana ? 'Quitar de esta semana' : 'Agregar a esta semana', onclick: () => {
+            const ya = S.temas.filter((x) => x.semana && x.id !== t.id).length;
+            if (!t.semana && ya >= 3) return toast('Ya tienes 3 esta semana');
+            guardarTema({ semana: !t.semana });
+          }, html: icon('star') }),
+          doble(h, { clase: 'btn ghost ib-s', icono: icon('trash'), texto: '', aviso: '¿Seguro?', accion: async () => { await api('/guiones/temas/' + t.id, { method: 'DELETE' }); S.sel = null; S.borrador = ''; await cargar(); render(); } }))),
+      estados, tabs, ...PEST[S.tab]());
   }
 
   // ---------- Panel de clases ----------
@@ -346,9 +338,9 @@ export async function mount(root, { api, toast, h, icon }) {
     const y = window.scrollY;
     const pestana = (id, n) => h('button', { role: 'tab', class: 'f' + (S.vista === id ? ' on' : ''), 'aria-selected': String(S.vista === id), onclick: () => { S.vista = id; render(); } }, n);
     root.replaceChildren(
-      h('div', { class: 'page-head' }, h('h1', {}, 'Guiones'), h('p', {}, 'De una idea o de una clase a un guion listo para grabar.')),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Guiones')),
       h('div', { class: 'filters vistas', role: 'tablist', 'aria-label': 'Secciones' }, pestana('guiones', `Temas y guiones (${S.temas.length})`), pestana('referencias', `Referencias (${S.refs.length})`)),
-      ...(S.vista === 'referencias' ? [referencias()] : [semana(), h('div', { class: 'cols' }, lista(), detalle())]));
+      ...(S.vista === 'referencias' ? [referencias()] : [semana(), h('div', { class: 'cols' }, lista(), detalle())].filter(Boolean)));
     if (soloLista) { const i = root.querySelector('input[type=search]'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
     else window.scrollTo(0, y);
   }

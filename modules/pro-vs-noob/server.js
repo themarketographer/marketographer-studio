@@ -21,7 +21,7 @@ export default async function register({ route, config }) {
     return d;
   };
   const readJson = (d, n, fb = null) => { try { return JSON.parse(fs.readFileSync(path.join(d, n), 'utf8')); } catch { return fb; } };
-  const CFG_DEF = { layout: 'apilado', a: { nombre: 'NOOB', color: '#ff4d4d' }, b: { nombre: 'PRO', color: '#2fd27a' }, anim: 'pop', audio: 'b', vs: true, titulo: '', duracion: 'min' };
+  const CFG_DEF = { modo: 'dialogo', partes: 3, turnos: [], layout: 'apilado', a: { nombre: 'NOOB', color: '#ff4d4d' }, b: { nombre: 'PRO', color: '#2fd27a' }, anim: 'pop', audio: 'b', vs: true, titulo: '', duracion: 'min' };
   const resumen = (id) => {
     const d = path.join(base, id), meta = readJson(d, 'meta.json', {});
     return { id, ...meta, tieneA: fs.existsSync(path.join(d, 'a.mp4')), tieneB: fs.existsSync(path.join(d, 'b.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')),
@@ -42,7 +42,10 @@ export default async function register({ route, config }) {
     const t = (x, n) => String(x ?? '').slice(0, n);
     const col = (c, fb) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : fb);
     const cfg = {
+      modo: body.modo === 'dividida' ? 'dividida' : 'dialogo',
       layout: body.layout === 'lado' ? 'lado' : 'apilado',
+      partes: Math.max(1, Math.min(12, Math.round(Number(body.partes)) || 3)),
+      turnos: (Array.isArray(body.turnos) ? body.turnos : []).slice(0, 60).filter((x) => x && (x.lado === 'a' || x.lado === 'b')).map((x) => ({ lado: x.lado, desde: Math.max(0, Number(x.desde) || 0), hasta: Math.max(0, Number(x.hasta) || 0) })),
       a: { nombre: t(body.a?.nombre, 14) || 'NOOB', color: col(body.a?.color, '#ff4d4d') },
       b: { nombre: t(body.b?.nombre, 14) || 'PRO', color: col(body.b?.color, '#2fd27a') },
       anim: ['pop', 'deslizar', 'caer', 'zoom', 'rebote', 'resorte', 'desenfoque', 'escribir'].includes(body.anim) ? body.anim : 'pop',
