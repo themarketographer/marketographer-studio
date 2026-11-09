@@ -67,14 +67,15 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
   const etq = () => `Exportar ${hecho()} archivo${hecho() === 1 ? '' : 's'}`;
   const btn = h('button', { type: 'button', class: 'btn gold exp-btn', onclick: exportar }, etq());
 
+  const interruptor = (texto, val, on) => h('button', { type: 'button', role: 'switch', 'aria-checked': String(!!val), class: 'sw-row', onclick: () => on(!val) }, h('span', { class: 'sw' + (val ? ' on' : ''), 'aria-hidden': 'true' }, h('i')), h('span', {}, texto));
   const personalizado = h('details', { open: !!aj.exportCustomOn },
     h('summary', {}, 'Ajuste personalizado'),
-    h('label', { class: 'sw-row' }, h('input', { type: 'checkbox', checked: !!aj.exportCustomOn, onchange: (e) => { aj.exportCustomOn = e.target.checked; guardar(); repintar(); } }), h('span', {}, 'Incluir este ajuste')),
+    interruptor('Incluir este ajuste', aj.exportCustomOn, (v) => { aj.exportCustomOn = v; guardar(); repintar(); }),
     seg('Resolución', [[720, '720p'], [1080, '1080p']], C.corto, (v) => { C.corto = Number(v); guardar(); repintar(); }),
     seg('Cuadros por segundo', FPS, C.fps, (v) => { C.fps = Number(v); guardar(); repintar(); }),
     seg('Formato', FORM, C.codec, (v) => { C.codec = v; guardar(); repintar(); }),
     seg('Calidad', CAL, C.mbps, (v) => { C.mbps = Number(v); guardar(); repintar(); }),
-    h('label', { class: 'sw-row' }, h('input', { type: 'checkbox', checked: !!C.lufs, onchange: (e) => { C.lufs = e.target.checked; guardar(); } }), h('span', {}, 'Sonido parejo para redes (−14 LUFS)')));
+    interruptor('Sonido parejo para redes (−14 LUFS)', C.lufs, (v) => { C.lufs = v; guardar(); repintar(); }));
 
   const filas = lista.map((f) => {
     const vol = f.lufs != null ? ` · ${String(f.lufs).replace('.', ',')} LUFS` : '';

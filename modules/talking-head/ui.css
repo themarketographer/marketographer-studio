@@ -842,3 +842,7 @@ input[type=range] { min-height: 32px; cursor: pointer; }
 .sec-tab { flex: 1 1 auto; min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-muted); font: 600 14px var(--font-body); cursor: pointer; white-space: nowrap; transition: background 150ms var(--ease), color 150ms var(--ease); }
 .sec-tab:hover { color: var(--ink); } .sec-tab.on { background: var(--ink); color: var(--surface-100); }
 .panel > section.card[hidden], .panel-in > section.card[hidden] { display: none; }
+
+/* tarjeta Exportar: el ajuste personalizado respira entre controles */
+.hoja details > :not(summary) { margin-top: 14px; }
+.hoja details > summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }

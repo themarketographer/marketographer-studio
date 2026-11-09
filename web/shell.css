@@ -138,3 +138,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline: 2
 main:has(.ed.ws) { padding-bottom: 10px; }
 img.brand-mark { background: none; display: block; border-radius: 8px; }
 img.brand-mark { width: 40px; height: 40px; margin: -4px; }
+
+/* casillas y botones de opción nativos: tamaño normal (la regla de arriba los estiraba como si fueran un campo de texto) */
+input[type=checkbox], input[type=radio] { width: 20px; height: 20px; min-height: 0; padding: 0; flex: none; accent-color: var(--accent, var(--ink)); cursor: pointer; }
