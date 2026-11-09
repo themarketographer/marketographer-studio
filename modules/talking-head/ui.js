@@ -158,6 +158,7 @@ function alinear(viejas, texto) {
 
 // ---------- íconos y ajustes guardados en el navegador ----------
 const ICN = {
+  x: 'M6 6l12 12M18 6L6 18',
   filtros: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
   doc: 'M6 4h9l3 3v13H6zM9 11h6M9 15h6', cortes: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM8.1 7.9L20 20M8.1 16.1L20 4',
   audio: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2', letras: 'M5 19L12 5l7 14M8 14h8', titulos: 'M4 6h16M12 6v13M8 19h8', subs: 'M4 7h16v10H4zM7 12h4M13 12h4',
@@ -349,16 +350,49 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     })), nota ? h('small', { class: 'hint' }, nota) : null);
   // Slider con restablecer: doble clic sobre la barra o el botón de la flecha vuelven al valor de fábrica.
   const slider = (label, min, max, step, val, show, on, def) => {
-    const out = h('output', {}), inp = h('input', { type: 'range', min, max, step, value: val, 'aria-label': label });
+    // Pocas opciones (hasta 5 posiciones): se eligen con botones, es más rápido que arrastrar.
+    const pasos = Math.round((max - min) / step);
+    if (pasos >= 1 && pasos <= 4) {
+      const opts = Array.from({ length: pasos + 1 }, (_, k) => +(min + k * step).toFixed(6));
+      const cerca = (a, b) => Math.abs(a - b) < step / 2;
+      const grupo = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label });
+      const pintaB = (v) => grupo.querySelectorAll('.seg-b').forEach((b, k) => { const on_ = cerca(opts[k], v); b.classList.toggle('on', on_); b.setAttribute('aria-checked', String(on_)); });
+      opts.forEach((o) => grupo.append(h('button', { type: 'button', role: 'radio', class: 'seg-b', onclick: () => { pintaB(o); on(o); } }, show(o))));
+      pintaB(Number(val));
+      return h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, label), grupo);
+    }
+    const out = h('button', { type: 'button', class: 'sl-val', title: 'Haz clic para escribir el valor exacto' }), inp = h('input', { type: 'range', min, max, step, value: val, 'aria-label': label });
     const sin = def == null || Number.isNaN(Number(def));
     const lejos = (v) => !sin && Math.abs(Number(v) - Number(def)) > step / 2;
     const rs = sin ? null : h('button', { type: 'button', class: 'sl-reset', title: `Volver a ${show(def)} (o doble clic en la barra)`, 'aria-label': `Restablecer ${label}`, html: ic('reset', 13) });
-    const pinta = (v) => { out.textContent = show(v); if (rs) rs.classList.toggle('on', lejos(v)); };
-    const poner = (v) => { inp.value = v; pinta(v); on(v); };
+    const rango = max - min;
+    const pinta = (v) => { out.textContent = show(v); inp.style.setProperty('--p', `${rango ? ((v - min) / rango) * 100 : 0}%`); if (rs) rs.classList.toggle('on', lejos(v)); };
+    const poner = (v) => { inp.value = v; pinta(Number(inp.value)); on(Number(inp.value)); };
     inp.addEventListener('input', (e) => { const v = Number(e.target.value); pinta(v); on(v); });
     if (!sin) { inp.addEventListener('dblclick', () => poner(Number(def))); rs.addEventListener('click', () => { poner(Number(def)); inp.focus(); }); }
+    // Valor escrito: se busca la posición cuya etiqueta coincide con el número (sirve con %, segundos, dB, etc.)
+    const num = (t) => parseFloat(String(t).replace(',', '.').replace(/[^0-9.+-]/g, ''));
+    // Se muestrea la etiqueta en 41 puntos (algunas posiciones dicen "Apagado" y no sirven) y se interpola entre los que son número.
+    const muestras = () => { const m = []; for (let k = 0; k <= 40; k++) { const v = min + (max - min) * k / 40, d = num(show(v)); if (!Number.isNaN(d)) m.push([v, d]); } return m; };
+    const aValor = (n, m) => {
+      let mejor = m[0], dist = Infinity;
+      for (let k = 0; k < m.length - 1; k++) {
+        const [v1, d1] = m[k], [v2, d2] = m[k + 1];
+        if ((n >= Math.min(d1, d2)) && (n <= Math.max(d1, d2)) && d1 !== d2) return v1 + ((n - d1) / (d2 - d1)) * (v2 - v1);
+      }
+      for (const x of m) { const dd = Math.abs(x[1] - n); if (dd < dist) { dist = dd; mejor = x; } }
+      return mejor[0];
+    };
+    out.addEventListener('click', () => {
+      const m = muestras(); if (m.length < 3) return;
+      const caja = h('input', { type: 'text', class: 'sl-edit', inputmode: 'decimal', value: String(num(show(Number(inp.value)))).replace('NaN', ''), 'aria-label': `Valor de ${label}` });
+      const fin = (ok) => { if (!caja.isConnected) return; if (ok) { const n = num(caja.value); if (!Number.isNaN(n)) poner(Math.max(min, Math.min(max, Math.round(aValor(n, m) / step) * step))); } caja.replaceWith(out); };
+      caja.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fin(true); } else if (e.key === 'Escape') { e.preventDefault(); fin(false); } });
+      caja.addEventListener('blur', () => fin(true));
+      out.replaceWith(caja); caja.focus(); caja.select();
+    });
     pinta(val);
-    return h('label', { class: 'ctl' }, h('span', { class: 'lbl row' }, label, h('span', { class: 'lbl-r' }, rs, out)), inp);
+    return h('div', { class: 'ctl' }, h('span', { class: 'lbl row' }, label, h('span', { class: 'lbl-r' }, rs, out)), inp);
   };
   const toggle = (label, val, on, nota) => h('div', { class: 'ctl' }, h('button', { type: 'button', role: 'switch', 'aria-checked': String(!!val), class: 'sw-row', onclick: () => on(!val) },
     h('span', { class: 'sw' + (val ? ' on' : ''), 'aria-hidden': 'true' }, h('i')), h('span', {}, label)), nota ? h('small', { class: 'hint' }, nota) : null);
@@ -701,21 +735,43 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     aplicar();
     const arrastrar = (div, eje) => div.addEventListener('pointerdown', (e) => {
       e.preventDefault(); try { div.setPointerCapture(e.pointerId); } catch { /* sin captura, se sigue con los eventos del divisor */ } div.classList.add('on');
-      const x0 = e.clientX, y0 = e.clientY, v0 = D.v, h0 = D.h ?? Math.round(window.innerHeight * 0.34);
-      const mover = (ev) => { if (eje === 'v') D.v = v0 + (ev.clientX - x0); else D.h = Math.max(0, (h0 ?? D.h ?? 300) - (ev.clientY - y0)); aplicar(); if (timeline) timeline.pintar(); };
+      const x0 = e.clientX, y0 = e.clientY, v0 = D.v, h0 = D.h ?? Math.round(window.innerHeight * 0.34 / (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9)), kz = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9;  // el mouse se mide en píxeles de pantalla y el diseño en píxeles escalados: se divide por la escala para que el divisor siga al mouse exacto
+      const mover = (ev) => { if (eje === 'v') D.v = v0 + (ev.clientX - x0) / kz; else D.h = Math.max(0, Math.min(timeline ? timeline.natural() : 330, (h0 ?? D.h ?? 300) - (ev.clientY - y0) / kz)); aplicar(); if (timeline) timeline.pintar(); };
       const fin = () => { div.classList.remove('on'); div.removeEventListener('pointermove', mover); div.removeEventListener('pointerup', fin); guardarDiseno(D); };
       div.addEventListener('pointermove', mover); div.addEventListener('pointerup', fin);
     });
     const teclas = (div, eje) => div.addEventListener('keydown', (e) => {
       const paso = e.shiftKey ? 60 : 20, d = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -paso : e.key === 'ArrowRight' || e.key === 'ArrowDown' ? paso : 0;
       if (!d) return; e.preventDefault();
-      if (eje === 'v') D.v += d; else D.h = Math.max(0, (D.h ?? Math.round(window.innerHeight * 0.34)) - d); aplicar(); guardarDiseno(D); if (timeline) timeline.pintar();
+      if (eje === 'v') D.v += d; else D.h = Math.max(0, Math.min(timeline ? timeline.natural() : 330, (D.h ?? Math.round(window.innerHeight * 0.34)) - d)); aplicar(); guardarDiseno(D); if (timeline) timeline.pintar();
     });
     const mk = (eje, rol) => h('div', { class: `ws-div ws-div-${eje}`, role: 'separator', 'aria-orientation': eje === 'v' ? 'vertical' : 'horizontal', tabindex: '0', title: 'Arrastra para cambiar el tamaño. Doble clic para volver al tamaño de siempre.',
       'aria-label': rol, ondblclick: () => { D[eje] = eje === 'v' ? 500 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); } });
     const dv = mk('v', 'Ancho del panel'), dh = mk('h', 'Tamaño de la línea de tiempo');
     arrastrar(dv, 'v'); arrastrar(dh, 'h'); teclas(dv, 'v'); teclas(dh, 'h');
     ed.append(dv, dh);
+    ed._alternarTL = () => { D.h = (D.h ?? 999) > 70 ? 0 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); };
+    // Ventanas laterales: se arrastra su borde para cambiar el ancho (doble clic = tamaño de siempre).
+    const AN = (() => { try { return { izq: 380, der: 420, ...JSON.parse(localStorage.getItem('estudio.anchos') || '{}') }; } catch { return { izq: 380, der: 420 }; } })();
+    const esc = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9;
+    const poner = () => { ed.style.setProperty('--izq-user', `${AN.izq}px`); ed.style.setProperty('--der-user', `${AN.der}px`); };
+    poner();
+    const asa = (lado) => {
+      const el = h('div', { class: `ws-rz ws-rz-${lado}`, role: 'separator', 'aria-orientation': 'vertical', tabindex: '0', title: 'Arrastra para cambiar el ancho. Doble clic para volver al tamaño de siempre.', 'aria-label': lado === 'izq' ? 'Ancho del panel de pasos' : 'Ancho de la tarjeta de ajustes' });
+      const guarda = () => { try { localStorage.setItem('estudio.anchos', JSON.stringify(AN)); } catch { /* sin memoria */ } if (timeline) timeline.pintar(); };
+      const cambia = (d) => { AN[lado] = Math.max(280, Math.min(760, Math.round(AN[lado] + d))); poner(); };
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+        const x0 = e.clientX, a0 = AN[lado], k = esc();
+        const mover = (ev) => { AN[lado] = Math.max(280, Math.min(760, Math.round(a0 + ((ev.clientX - x0) / k) * (lado === 'izq' ? 1 : -1)))); poner(); };
+        const fin = () => { el.removeEventListener('pointermove', mover); el.removeEventListener('pointerup', fin); guarda(); };
+        el.addEventListener('pointermove', mover); el.addEventListener('pointerup', fin);
+      });
+      el.addEventListener('keydown', (e) => { const d = e.key === 'ArrowLeft' ? -20 : e.key === 'ArrowRight' ? 20 : 0; if (!d) return; e.preventDefault(); cambia(lado === 'izq' ? d : -d); guarda(); });
+      el.addEventListener('dblclick', () => { AN[lado] = lado === 'izq' ? 380 : 420; poner(); guarda(); });
+      return el;
+    };
+    ed.append(asa('izq'), asa('der'));
     if (wsResize) removeEventListener('resize', wsResize);
     wsResize = () => { if (ed.isConnected) { aplicar(); if (timeline) timeline.pintar(); } };
     addEventListener('resize', wsResize);
@@ -752,9 +808,11 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         h('button', { class: 'btn gold', onclick: () => lanzar('analizar', {}), html: icon('play') + ' Analizar video' })));
     }
     root.style.setProperty('--asp', FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']);
+    { const [aw, ah] = String(FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']).split('/').map(Number); if (aw && ah) root.style.setProperty('--ar', String(aw / ah)); }
     S.anchoAncho = window.innerWidth >= 900;  // con qué diseño se pintó: si la ventana cruza los 900 px se vuelve a pintar
-    const ed = h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
-    if (ed.classList.contains('ws')) { titulo.className = 'cab-titulo'; cab.insertBefore(titulo, cab.children[1]); cab.insertBefore(buscadorHerramientas(), cab.lastElementChild); root.replaceChildren(cab, ed); espacioDeTrabajo(ed); }
+    const ed = h('div', { class: 'ed ' + (window.innerWidth >= 900 ? 'normal' : (S.vista || 'normal')) + (window.innerWidth >= 900 && panelCerrado() ? ' panel-cerrado' : '') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
+    ed.dataset.paso = S.paso; ed.dataset.prio = prioridadDiseno();
+    if (ed.classList.contains('ws')) { titulo.className = 'cab-titulo'; cab.insertBefore(titulo, cab.children[1]); cab.insertBefore(buscadorHerramientas(), cab.lastElementChild); cab.insertBefore(botonDiseno(), cab.lastElementChild); root.replaceChildren(cab, ed); espacioDeTrabajo(ed); }
     else root.replaceChildren(cab, titulo, ed);
     decorar(root);
     if (S.panel) montarHoja();
@@ -857,17 +915,21 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       live = crearLive({ onEdit: () => cambio(), getFiltros: () => Object.fromEntries(FILTROS.map((f) => [f.id, f.ops])), h, srcUrl: vurl('source'), alphaUrl: vurl('alpha'), getPlan: plan, getWords: () => S.p.palabras || [], fam, sfxBase: '/m/talking-head/assets/sfx', escenaUrl, sfxUserUrl: (n) => `/api${A}/sfx/${encodeURIComponent(n)}`, musicUrl: (n) => `/api${A}/musica/${encodeURIComponent(n)}`, brollUrl: (n) => `/api${A}/broll/${encodeURIComponent(n)}` });
       video = live.video; pantalla = live.el;
     } else {
-      video = h('video', { controls: true, playsinline: true, src: vurl(S.tab), class: 'player', onloadedmetadata: (e) => { const vw = e.target.videoWidth, vh = e.target.videoHeight; if (vw) { const ph = e.target.closest('.phone'); ph.style.aspectRatio = `${vw} / ${vh}`; ph.classList.toggle('ancho', vw / vh > 1.2); e.target.closest('.ed')?.classList.toggle('ancho', vw / vh > 1.2); } } }); pantalla = video;
+      video = h('video', { controls: true, playsinline: true, src: vurl(S.tab), class: 'player', onloadedmetadata: (e) => { const vw = e.target.videoWidth, vh = e.target.videoHeight; if (vw) { const ph = e.target.closest('.phone'); ph.style.aspectRatio = `${vw} / ${vh}`; ph.style.setProperty('--ar', String(vw / vh)); ph.classList.toggle('ancho', vw / vh > 1.2); e.target.closest('.ed')?.classList.toggle('ancho', vw / vh > 1.2); } } }); pantalla = video;
     }
     const fmP = S.tab !== 'source' && S.p.plan ? (S.p.plan.formato || '9x16') : null;
     const phone = h('div', { class: 'phone' + (fmP === '16x9' ? ' ancho' : ''), style: fmP ? `aspect-ratio: ${FMT_ASP[fmP]}` : '' }, pantalla, zonaSegura(fmP && fmP !== '9x16' ? 'none' : S.zona));
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
+    const conBarraTL = S.tab === 'live' && window.innerWidth >= 900;  // en pantalla ancha deshacer y rehacer viven en la barra de la línea de tiempo
+    const grupoUndo = (sz) => h('div', { class: 'ib-grupo', role: 'group', 'aria-label': 'Deshacer y rehacer' },
+      h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', sz) }),
+      h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', sz) }));
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, barraExtra: null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onAlternar: () => { if (live) live.alternar(); }, onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, barraExtra: conBarraTL ? grupoUndo(22) : null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onAlternar: () => { if (live) live.alternar(); }, onTransporte: (a) => { if (!live) return; ({ inicio: () => live.ir(0), atras: () => live.saltar(-5), adelante: () => live.saltar(5), play: () => live.reproducir(), pausa: () => live.pausar(), parar: () => live.parar() })[a]?.(); }, onAlternarTL: () => document.querySelector('.ed.ws')?._alternarTL?.(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
-    const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
+    const pantallaYMedidor = h('div', { class: 'pantalla-y-medidor' }, phone, medidor ? medidor.el : null);
     lineaEl = S.tab === 'live' ? h('div', { class: 'ltime', role: 'slider', 'aria-label': 'Línea de tiempo del video', tabindex: '0',
       onpointerdown: (e) => { const mover = (ev) => { const r = lineaEl.getBoundingClientRect(); const t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * plan().duration; if (live) live.ir(t); pintarCabeza(); }; mover(e); lineaEl.setPointerCapture(e.pointerId); lineaEl.onpointermove = mover; lineaEl.onpointerup = () => { lineaEl.onpointermove = null; }; } }) : null;
     clearInterval(tlTimer);
@@ -877,9 +939,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       h('div', { class: 'vbar' },
         S.tab === 'live' ? botonAntes() : h('span', {}),
         h('div', { class: 'vtools' },
-          h('div', { class: 'ib-grupo', role: 'group', 'aria-label': 'Deshacer y rehacer' },
-          h('button', { type: 'button', id: 'th-undo', class: 'ib', title: 'Deshacer (Cmd+Z)', 'aria-label': 'Deshacer', disabled: Hist.i <= 0, onclick: () => viajar(-1), html: ic('deshacer', 16) }),
-          h('button', { type: 'button', id: 'th-redo', class: 'ib', title: 'Rehacer (Cmd+Shift+Z)', 'aria-label': 'Rehacer', disabled: Hist.i >= Hist.pila.length - 1, onclick: () => viajar(1), html: ic('rehacer', 16) })),
+          conBarraTL ? null : grupoUndo(16),
           h('div', { class: 'ib-grupo', role: 'group', 'aria-label': 'Vista' },
           h('button', { type: 'button', class: 'ib' + (S.vista === 'grande' ? ' on' : ''), title: 'Video más grande', 'aria-label': 'Video más grande', 'aria-pressed': String(S.vista === 'grande'), onclick: () => cambiarVista(S.vista === 'grande' ? 'normal' : 'grande'), html: ic('zoom', 16) }),
           S.tab === 'live' ? h('button', { type: 'button', class: 'ib med-btn' + (medidor ? ' on' : ''), title: 'Medidor de sonido', 'aria-label': 'Medidor de sonido', 'aria-pressed': String(!!medidor), onclick: () => { try { localStorage.setItem('estudio.medidor', medidorOn ? '0' : '1'); } catch { /* sin memoria */ } pintar(); }, html: ic('onda', 16) }) : null,
@@ -965,21 +1025,43 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   function colSet() {
     const i = PASOS.findIndex((x) => x.id === S.paso), P = PASOS[i];
     tilesEl = null; inlineEl = null; S.inline = P.inline || null;
+    document.querySelector('.ed')?.setAttribute('data-paso', P.id);
     if (P.inline) inlineEl = h('div', { class: 'panel inline' }); else tilesEl = h('div', { class: 'tiles' });
     const ant = PASOS[i - 1], sig = PASOS[i + 1];
     const nav = h('nav', { class: 'pasos', 'aria-label': 'Pasos para editar tu video', style: `--i:${i};--n:${PASOS.length}` },
-      PASOS.map((p, k) => h('button', { type: 'button', class: 'paso-b' + (k === i ? ' on' : '') + (k < i ? ' hecho' : ''), 'aria-current': k === i ? 'step' : 'false', onclick: () => irPaso(p.id) },
+      PASOS.map((p, k) => h('button', { type: 'button', class: 'paso-b' + (k === i ? ' on' : '') + (k < i ? ' hecho' : ''), 'aria-current': k === i ? 'step' : 'false', onclick: () => (k === i && window.innerWidth >= 900 ? alternarPanel() : irPaso(p.id)), title: `${k + 1}. ${p.n}: ${p.r}` },
         h('span', { class: 'paso-n', html: k < i ? ic('check', 14) : ic(p.ic, 16) }), h('span', { class: 'paso-t' }, h('strong', {}, `${k + 1}. ${p.n}`), h('small', {}, p.r)))),
       h('i', { class: 'paso-barra', 'aria-hidden': 'true' }));
     const col = h('div', { class: 'col-set' }, nav,
+      h('div', { class: 'panel-flot' },
       h('div', { class: 'paso', key: P.id },
-        h('div', { class: 'paso-head' }, h('h2', {}, P.n)),
+        h('div', { class: 'paso-head' }, h('h2', {}, P.n), h('button', { type: 'button', class: 'panel-x', title: 'Cerrar el panel', 'aria-label': 'Cerrar el panel', onclick: alternarPanel, html: ic('x', 16) })),
         P.inline ? inlineEl : tilesEl),
       h('div', { class: 'paso-pie' },
         ant ? h('button', { type: 'button', class: 'btn ghost', onclick: () => irPaso(ant.id), html: ic('izq', 16) + ` ${ant.n}` }) : h('span'),
-        sig ? h('button', { type: 'button', class: 'btn gold', onclick: () => irPaso(sig.id), html: `${sig.n} ` + ic('der', 16) }) : h('span')));
+        sig ? h('button', { type: 'button', class: 'btn gold', onclick: () => irPaso(sig.id), html: `${sig.n} ` + ic('der', 16) }) : h('span'))));
     setTimeout(() => { if (P.inline) pintarPanel(); else pintarTiles(); decorar(col); }, 0);
     return col;
+  }
+  // Prioridad del diseño (como en Edits): qué zona ocupa todo el alto o todo el ancho de la ventana.
+  const PRIO = [
+    ['tl', 'Línea de tiempo', 'Ocupa todo el ancho de la ventana', '<rect x="1.5" y="1.5" width="41" height="31" rx="5"/><rect x="5" y="5" width="15" height="14" rx="2" fill-opacity=".25"/><rect x="23" y="5" width="16" height="14" rx="2" fill-opacity=".25"/><rect x="5" y="22" width="34" height="7" rx="2" class="on"/>'],
+    ['izq', 'Pasos', 'El panel de pasos ocupa toda la altura', '<rect x="1.5" y="1.5" width="41" height="31" rx="5"/><rect x="5" y="5" width="12" height="24" rx="2" class="on"/><rect x="20" y="5" width="19" height="14" rx="2" fill-opacity=".25"/><rect x="20" y="22" width="19" height="7" rx="2" fill-opacity=".25"/>'],
+    ['der', 'Ajustes', 'La tarjeta de ajustes ocupa toda la altura', '<rect x="1.5" y="1.5" width="41" height="31" rx="5"/><rect x="27" y="5" width="12" height="24" rx="2" class="on"/><rect x="5" y="5" width="19" height="14" rx="2" fill-opacity=".25"/><rect x="5" y="22" width="19" height="7" rx="2" fill-opacity=".25"/>'],
+  ];
+  const prioridadDiseno = () => { try { const v = localStorage.getItem('estudio.prio'); return PRIO.some((x) => x[0] === v) ? v : 'tl'; } catch { return 'tl'; } };
+  function botonDiseno() {
+    const lista = h('div', { class: 'pop pop-abajo', hidden: true, role: 'dialog', 'aria-label': 'Prioridades del diseño' }, h('p', { class: 'pop-sec' }, 'Prioridades del diseño'));
+    const pintar = () => lista.replaceChildren(lista.firstChild, ...PRIO.map(([id, t, d, svg]) => h('button', { type: 'button', class: 'pop-fila prio-op' + (prioridadDiseno() === id ? ' on' : ''), 'aria-pressed': String(prioridadDiseno() === id),
+      onclick: () => { try { localStorage.setItem('estudio.prio', id); } catch { /* sin memoria */ } const ed = document.querySelector('.ed.ws'); if (ed) ed.dataset.prio = id; pintar(); cerrar(); if (timeline) setTimeout(() => timeline.pintar(), 0); } },
+      h('span', { class: 'prio-ic', html: `<svg viewBox="0 0 44 34" width="44" height="34" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${svg}</svg>` }),
+      h('span', { class: 'pop-tx' }, h('strong', {}, t), h('small', {}, d)))));
+    const cerrar = () => { lista.hidden = true; document.removeEventListener('pointerdown', fuera, true); document.removeEventListener('keydown', esc, true); };
+    const fuera = (e) => { if (!wrap.contains(e.target)) cerrar(); }; const esc = (e) => { if (e.key === 'Escape') cerrar(); };
+    const b = h('button', { type: 'button', class: 'btn ghost sm btn-diseno', title: 'Diseño: qué zona tiene prioridad', 'aria-label': 'Prioridades del diseño', 'aria-haspopup': 'dialog',
+      html: ic('formato', 18), onclick: () => { if (lista.hidden) { pintar(); lista.hidden = false; document.addEventListener('pointerdown', fuera, true); document.addEventListener('keydown', esc, true); } else cerrar(); } });
+    const wrap = h('div', { class: 'pop-wrap' }, b, lista);
+    return wrap;
   }
   // "Buscar herramienta": escribes y saltas directo a la tarjeta (como en los editores de video).
   function abrirTarjeta(id) {
@@ -1010,7 +1092,15 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const wrap = h('div', { class: 'buscar' }, inp, lista);
     return wrap;
   }
+  const panelCerrado = () => { try { return localStorage.getItem('estudio.panel') === '0'; } catch { return false; } };
+  function alternarPanel() {
+    const ed = document.querySelector('.ed'); if (!ed) return;
+    const cerrado = ed.classList.toggle('panel-cerrado');
+    try { localStorage.setItem('estudio.panel', cerrado ? '0' : '1'); } catch { /* sin memoria */ }
+    if (timeline) setTimeout(() => timeline.pintar(), 0);
+  }
   function irPaso(id) {
+    { const ed0 = document.querySelector('.ed.panel-cerrado'); if (ed0) { ed0.classList.remove('panel-cerrado'); try { localStorage.setItem('estudio.panel', '1'); } catch { /* sin memoria */ } } }
     if (S.panel) cerrarHoja();
     S.paso = id;
     try { localStorage.setItem('estudio.paso.' + S.p.id, id); } catch { /* sin almacenamiento */ }
@@ -1696,18 +1786,23 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     const tx = (t) => (t / dur) * 100;
     const aT = (clientX) => { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(dur, ((clientX - r.left) / r.width) * dur)); };
     const dibujarOnda = () => {
-      const ancho = Math.round((scroller.clientWidth || 640) * zoom), w = Math.min(ancho, 14000), hgt = 120, dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const ancho = Math.round((scroller.clientWidth || 640) * zoom), w = Math.min(ancho, 14000), hgt = 140, dpr = Math.min(window.devicePixelRatio || 1, 2);
       tl.style.width = `${ancho}px`;
       canvas.width = w * dpr; canvas.height = hgt * dpr; canvas.style.height = `${hgt}px`;
       const g = canvas.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, hgt);
-      const yDb = (d) => hgt - ((Math.max(-60, Math.min(0, d)) + 60) / 60) * (hgt - 10) - 4;
-      const n = env.db.length, per = n / w;
-      g.fillStyle = css('--ink'); g.globalAlpha = 0.85;
-      for (let x = 0; x < w; x += 2) {
-        let m = -90; for (let i = Math.floor(x * per); i < Math.min(n, Math.floor((x + 2) * per)); i++) m = Math.max(m, env.db[i]);
-        const y = yDb(m); g.fillRect(x, y, 1.4, hgt - y - 2);
+      // Onda espejo (como en cualquier editor de audio): una columna cada 3 px, amplitud suavizada para que se lea de un vistazo.
+      const n = env.db.length, per = n / w, paso = 3, cols = Math.ceil(w / paso), mitad = hgt / 2 - 5;
+      const amp = new Float32Array(cols);
+      for (let k = 0; k < cols; k++) {
+        let m = -90; for (let i = Math.floor(k * paso * per); i < Math.min(n, Math.floor((k + 1) * paso * per)); i++) m = Math.max(m, env.db[i]);
+        amp[k] = Math.pow(Math.max(0, Math.min(1, (m + 56) / 56)), 1.7);
       }
-      g.globalAlpha = 1;
+      g.fillStyle = css('--ink'); g.globalAlpha = 0.82;
+      for (let k = 0; k < cols; k++) {
+        const a = ((amp[Math.max(0, k - 1)] + amp[k] * 2 + amp[Math.min(cols - 1, k + 1)]) / 4) * mitad, hh = Math.max(1, a);
+        g.beginPath(); g.roundRect(k * paso, hgt / 2 - hh, 2, hh * 2, 1); g.fill();
+      }
+      g.globalAlpha = 0.15; g.fillRect(0, hgt / 2, w, 1); g.globalAlpha = 1;
     };
     const enCorte = (t) => (c.on && (c.rangos || []).some(([a, b]) => t >= a && t <= b)) || (c.borradas || []).some(([a, b]) => t >= a && t <= b);
     const alternar = (r) => {
@@ -1757,7 +1852,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     };
     const pintarDetalle = () => {
       const r = todos.find((x) => idDe(x) === sel);
-      if (!r) return detalle.replaceChildren(h('p', { class: 'tl-ayuda' }, h('b', {}, 'Cómo se usa: '), 'arrastra sobre un espacio vacío para cortar ahí, aunque sea en medio de una frase. Arrastra el borde de una zona roja para ajustarla, o por dentro para moverla entera. Un clic la conserva o la quita. Con Cmd y la rueda haces zoom para cortes muy cortos.'));
+      if (!r) return detalle.replaceChildren();
       const off = ignorado(r), nudge = (lado, d) => { const t = (lado === 'l' ? r.s : r.e) + d; const nr = mover(r, lado, t); sel = idDe(nr); S.corteSel = sel; cambio(); pintarTodo(); };
       const btn = (txt, ico, fn, cls = 'ghost') => h('button', { type: 'button', class: `btn ${cls} sm`, onclick: fn, html: ic(ico, 14) + ` ${txt}` });
       const par = (txt, lado) => h('div', { class: 'ajuste-f' }, h('span', { class: 'lbl' }, txt), h('div', { class: 'row-gap' },
@@ -1864,23 +1959,16 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
       h('small', { class: 'hint' }, nota));
     const pr = Object.fromEntries(PRESETS_PAUSA.map(([id, , , p]) => [id, durPreset(p)]));
     const lineaTxt = (v) => `queda en ${v.toFixed(1)} s`;
+    const filaPresets = h('div', { class: 'seg presets-fila', role: 'radiogroup', 'aria-label': 'Cuánto cortar' },
+      [['off', 'Sin cortes', 'Todo el audio tal cual', dur], ...PRESETS_PAUSA.map(([id, n, nota]) => [id, n, nota, pr[id]])].map(([id, n, nota, v]) =>
+        h('button', { type: 'button', role: 'radio', 'aria-checked': String(activo() === id), class: 'seg-b' + (activo() === id ? ' on' : ''), title: `${nota} (${lineaTxt(v)})`, onclick: () => aplicar(id) }, n)));
+    const ayudaCtl = (txt, ico, fn) => h('button', { type: 'button', class: 'lt-ib', title: txt, 'aria-label': txt, onclick: fn, html: ic(ico, 20) });
     cont.append(
-      h('section', { class: 'card' }, h('h2', {}, 'Pausas, respiraciones y ruidos'),
-        h('p', { class: 'sub' }, 'Se queda solo lo que dices. Lo demás se corta: pausas largas, respiraciones, golpes y ruido de la calle, suenen fuerte o bajito. Las palabras que borraste arriba tampoco entran.'),
-        h('div', { class: 'pzs' },
-          tarjeta('off', 'Sin cortes', 'Todo el audio tal cual', lineaTxt(dur)),
-          PRESETS_PAUSA.map(([id, n, nota]) => tarjeta(id, n, nota, lineaTxt(pr[id])))),
-        c.on && c.modo !== 'palabras' ? h('div', { class: 'aviso' }, h('span', {}, 'Este video usaba el corte por volumen, que puede comerse palabras bajitas y dejar pasar ruidos fuertes.'), h('button', { type: 'button', class: 'btn gold sm', onclick: () => aplicar('agil') }, 'Pasar al corte por palabras')) : null,
-        resumen),
-      c.on ? h('section', { class: 'card' }, h('h2', {}, 'Afinar los cortes'),
-        h('div', { class: 'tl-barra' },
-          h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': 'Alejar', onclick: () => poner(zoom * 0.7), html: ic('zoom', 14) + ' −' }),
-          h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': 'Acercar', onclick: () => poner(zoom * 1.4), html: ic('zoom', 14) + ' +' }),
-          h('button', { type: 'button', class: 'btn ghost sm', onclick: () => poner(1) }, 'Ver todo'),
-          h('span', { class: 'hint' }, 'Ctrl o Cmd y la rueda también acercan')),
-        scroller,
-        h('div', { class: 'tl-leyenda' }, h('span', {}, h('i', { class: 'lg rojo' }), 'Se corta'), h('span', {}, h('i', { class: 'lg raya' }), 'Conservado por ti'), h('span', {}, h('i', { class: 'lg azul' }), 'Corte tuyo'), h('span', {}, h('i', { class: 'lg txt' }), 'Quitado con el texto')),
-        detalle) : null,
+      h('section', { class: 'card card-cortes' }, h('h2', {}, 'Cortes'),
+        h('div', { class: 'cortes-barra' }, filaPresets, h('div', { class: 'cortes-zoom' },
+          ayudaCtl('Alejar (o Cmd y rueda)', 'zoom', () => poner(zoom * 0.7)), ayudaCtl('Acercar (o Cmd y rueda)', 'zoom', () => poner(zoom * 1.4)), ayudaCtl('Ver todo', 'tamano', () => poner(1)))),
+        c.on && c.modo !== 'palabras' ? h('div', { class: 'aviso' }, h('span', {}, 'Este video usaba el corte por volumen, que puede comerse palabras bajitas.'), h('button', { type: 'button', class: 'btn gold sm', onclick: () => aplicar('agil') }, 'Pasar al corte por palabras')) : null,
+        scroller, detalle, resumen),
       c.on ? h('details', { class: 'card' }, h('summary', {}, 'Cuánto aire dejar alrededor de las palabras'),
         paso('Aire antes de cada palabra', 'aireAntes', 0.02, 0, 0.4, 'Más aire evita que se coma el principio de una palabra.'),
         paso('Aire después de cada palabra', 'aireDespues', 0.02, 0, 0.5, 'Más aire deja respirar y evita cortar el final.'),
@@ -1898,7 +1986,8 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     return [cont];
   }
   async function panelRecorte() {
-    return [cardTexto(), cardLimpieza(), ...(await panelPausas())];
+    const pausas = await panelPausas();  // la herramienta de cortes va primero: es lo más usado
+    return [...pausas, cardTexto(), cardLimpieza()];
   }
 
   // ----- Estilo -----

@@ -994,13 +994,20 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     voz.gate.gain.setTargetAtTime(g, now, g < 1 ? 0.12 : 0.02);
   }
 
+  // El audio se arma ANTES de reproducir. Antes se armaba con el video ya corriendo: la voz cambiaba de ruta a mitad de camino
+  // y salía tarde respecto a la imagen (por eso se sentía desfasada al apretar play).
+  function prepararAudio() {
+    if (estatico) return;
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' }); master = ac.createGain(); master.connect(ac.destination); } catch { ac = null; master = null; } }
+    if (ac && !voz) crearVoz();
+  }
   function pararMusica() { if (musEl) musEl.pause(); tAud = -1; }
   function audioTick(P) {
     if (estatico) return;
     if (vs.paused) { pararMusica(); return; }
     if (antes) { pararMusica(); if (ac && voz && !voz.off) aplicarVoz({ mejorar: false }); tAud = vs.currentTime; return; }
     const st = P.style, t = vs.currentTime;
-    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.connect(ac.destination); } catch { ac = null; master = null; } }
+    prepararAudio();
     if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
     if (ac && tAud >= 0 && t > tAud && t - tAud < 0.3 && st.sonidos) {
       if (st.titulos) for (const e of P.events || []) if (e.sfx && e.sfx !== 'none' && e.start > tAud && e.start <= t) sonar(e.sfx);
@@ -1053,7 +1060,13 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   const bPlay = h('button', { type: 'button', class: 'btn gold sm live-play', 'aria-label': 'Reproducir o pausar', onclick: alternar }, 'Reproducir');
   const barra = h('input', { type: 'range', min: 0, max: 1000, value: 0, class: 'live-seek', 'aria-label': 'Posición en el video', oninput: (e) => { vs.currentTime = (Number(e.target.value) / 1000) * (vs.duration || 0); va.currentTime = vs.currentTime; dibujar(); } });
   const tiempo = h('span', { class: 'live-time' }, '0:00');
-  function alternar() { if (vs.paused) { vs.play().catch(() => {}); va.play().catch(() => {}); } else { vs.pause(); va.pause(); } }
+  async function alternar() {
+    if (vs.paused) {
+      prepararAudio();
+      try { if (ac && ac.state === 'suspended') await ac.resume(); } catch { /* se reproduce igual */ }
+      vs.play().catch(() => {}); va.play().catch(() => {});
+    } else { vs.pause(); va.pause(); }
+  }
   function pintarControles() {
     const dur = vs.duration || 0;
     bPlay.textContent = vs.paused ? 'Reproducir' : 'Pausar';
@@ -1108,7 +1121,10 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
     antes: (v) => { antes = !!v; sucio = true; if (!v) tAud = -1; },
     ir: (t) => { vs.currentTime = t; va.currentTime = t; sucio = true; matteT = -1; },
     alternar,
-    pausar: () => { if (!vs.paused) vs.pause(); },
+    pausar: () => { if (!vs.paused) { vs.pause(); va.pause(); } },
+    reproducir: () => { if (vs.paused) alternar(); },
+    parar: () => { vs.pause(); va.pause(); vs.currentTime = 0; va.currentTime = 0; sucio = true; matteT = -1; },
+    saltar: (dt) => { const t = Math.max(0, Math.min(vs.duration || 0, vs.currentTime + dt)); vs.currentTime = t; va.currentTime = t; sucio = true; matteT = -1; },
     destroy: () => { vivo = false; clipEls.forEach((el) => { if (el.tagName === 'VIDEO') { el.pause(); el.removeAttribute('src'); el.load(); } }); if (musEl) { musEl.pause(); musEl = null; } if (ac) { ac.close().catch(() => {}); ac = null; master = null; voz = null; } cancelAnimationFrame(raf); vs.pause(); va.pause(); vs.removeAttribute('src'); va.removeAttribute('src'); vs.load(); va.load(); },
   };
 }

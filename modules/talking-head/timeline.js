@@ -16,7 +16,7 @@ export function imanar(t, puntos, tol) {
 }
 // node -e "import('./timeline.js').then(m=>{console.assert(m.imanar(1.02,[0,1,2],0.05)===1);console.assert(m.imanar(1.5,[0,1,2],0.05)===1.5);console.assert(m.imanar(3,[],1)===3)})"
 
-export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr, onAlternar = () => {} }) {
+export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr, onAlternar = () => {}, onAlternarTL = () => {}, onTransporte = () => {} }) {
   let pxs = 40, ajustar = true, sel = null, rango = null, iman = true, abierto = true, raf = 0, destruido = false, guia = null;
   try { abierto = localStorage.getItem('estudio.timeline') !== '0'; } catch { /* sin memoria */ }
   const dur = () => getPlan().duration || 1;
@@ -26,7 +26,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   const accion = h('span', { class: 'lt-acc' });
   const btn = (txt, tit, fn, cls = '') => h('button', { type: 'button', class: 'btn ghost sm ' + cls, title: tit, 'aria-label': tit, onclick: fn }, txt);
   // Menú de opciones tipo ventana flotante: interruptores con icono, como en los editores de video.
-  const svg = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const svg = (d, z = 20) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const filaPop = (icono, titulo, nota, get, set) => {
     const sw = h('span', { class: 'pop-sw' + (get() ? ' on' : ''), 'aria-hidden': 'true' }, h('i'));
     const b = h('button', { type: 'button', role: 'switch', class: 'pop-fila', 'aria-checked': String(!!get()), onclick: () => { set(!get()); sw.classList.toggle('on', !!get()); b.setAttribute('aria-checked', String(!!get())); } },
@@ -40,12 +40,34 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   const cerrarPop = () => { pop.hidden = true; document.removeEventListener('pointerdown', fueraPop, true); document.removeEventListener('keydown', escPop, true); };
   const fueraPop = (e) => { if (!pop.parentElement.contains(e.target)) cerrarPop(); };
   const escPop = (e) => { if (e.key === 'Escape') cerrarPop(); };
-  const bOpc = h('button', { type: 'button', class: 'btn ghost sm lt-opc', title: 'Opciones de la línea de tiempo', 'aria-label': 'Opciones de la línea de tiempo', 'aria-haspopup': 'dialog',
-    html: svg('<path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2"/><circle cx="9" cy="16" r="2"/>') + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+  const bOpc = h('button', { type: 'button', class: 'lt-ib lt-opc', title: 'Opciones de la línea de tiempo', 'aria-label': 'Opciones de la línea de tiempo', 'aria-haspopup': 'dialog',
+    html: svg('<path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2"/><circle cx="9" cy="16" r="2"/>', 22) + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     onclick: () => { if (pop.hidden) { fImn.sync(); fAj.sync(); pop.hidden = false; document.addEventListener('pointerdown', fueraPop, true); document.addEventListener('keydown', escPop, true); } else cerrarPop(); } });
   const bPop = h('div', { class: 'pop-wrap' }, bOpc, pop);
-  const bPlay = h('button', { type: 'button', class: 'lt-play', title: 'Reproducir o pausar (espacio)', 'aria-label': 'Reproducir o pausar', onclick: onAlternar, html: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>' });
-  const barra = h('div', { class: 'lt-barra' }, bPlay, info, btn('−', 'Alejar', () => zoom(0.7)), btn('+', 'Acercar', () => zoom(1.4)), bPop, barraExtra, accion);
+  const ico = (d, z = 20, fill = true) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="${fill ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${fill ? 0 : 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const tb = (cls, d, tit, accion) => h('button', { type: 'button', class: 'lt-tr ' + cls, title: tit, 'aria-label': tit, onclick: () => { onTransporte(accion); setTimeout(estadoTransporte, 60); setTimeout(estadoTransporte, 400); }, html: ico(d) });
+  const estadoTransporte = () => { const v = getVideo(), sonando = !!(v && !v.paused); if (bPlay.disabled !== sonando) { bPlay.disabled = sonando; bPausa.disabled = !sonando; } };
+  const bInicio = tb('', '<path d="M6 5h2v14H6zM20 5v14L9 12z"/>', 'Ir al inicio', 'inicio');
+  const bAtras = tb('', '<path d="M12.5 6v12L4 12zM21 6v12l-8.5-6z"/>', 'Atrás 5 segundos', 'atras');
+  const bPlay = tb('lt-play', '<path d="M7 4l13 8-13 8z"/>', 'Reproducir (espacio)', 'play');
+  const bPausa = tb('lt-pausa', '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>', 'Pausa (espacio)', 'pausa');
+  const bParar = tb('', '<rect x="6" y="6" width="12" height="12" rx="2"/>', 'Parar y volver al inicio', 'parar');
+  const bAdelante = tb('', '<path d="M11.5 6v12L20 12zM3 6v12l8.5-6z"/>', 'Adelante 5 segundos', 'adelante');
+  bPausa.disabled = true;
+  const transporte = h('div', { class: 'lt-transporte', role: 'group', 'aria-label': 'Reproducción' }, bInicio, bAtras, bPlay, bPausa, bParar, bAdelante);
+  const lupa = (mas) => svg(`<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6${mas ? 'M11 8v6' : ''}"/>`, 22);
+  const bIb = (html, tit, fn) => h('button', { type: 'button', class: 'lt-ib', title: tit, 'aria-label': tit, onclick: fn, html });
+  // Zoom con barra: va de ver todo el video hasta el cuadro suelto (escala logarítmica).
+  const zoomSl = h('input', { type: 'range', class: 'lt-zoom', min: 0, max: 1, step: 0.005, value: 0, 'aria-label': 'Zoom de la línea de tiempo' });
+  let rafZ2 = 0;
+  zoomSl.addEventListener('input', () => { if (rafZ2) return; rafZ2 = requestAnimationFrame(() => { rafZ2 = 0; const np = MIN_PXS * Math.pow(MAX_PXS / MIN_PXS, Number(zoomSl.value)); zoom(np / pxs); }); });
+  const syncZoom = () => { if (document.activeElement !== zoomSl) zoomSl.value = String(Math.max(0, Math.min(1, Math.log(pxs / MIN_PXS) / Math.log(MAX_PXS / MIN_PXS)))); };
+  const chev = (arriba) => svg(arriba ? '<path d="M6 15l6-6 6 6"/>' : '<path d="M6 9l6 6 6-6"/>', 22);
+  const bOcultar = h('button', { type: 'button', class: 'lt-ib lt-ocultar', title: 'Ocultar la línea de tiempo', 'aria-label': 'Ocultar o mostrar la línea de tiempo', onclick: () => onAlternarTL(), html: chev(false) });
+  const barra = h('div', { class: 'lt-barra' },
+    h('div', { class: 'lt-izq' }, transporte, info),
+    h('div', { class: 'lt-centro' }, barraExtra, bPop, accion),
+    h('div', { class: 'lt-der' }, bIb(lupa(false), 'Alejar', () => zoom(0.7)), zoomSl, bIb(lupa(true), 'Acercar', () => zoom(1.4)), bIb(svg('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>', 22), 'Ver todo el video', () => { ajustar = true; pintar(); }), bOcultar));
   const etiquetas = h('div', { class: 'lt-etq' }, PISTAS.map(([, n, y, a]) => h('span', { style: `top:${y}px;height:${a}px` }, n)));
   const inner = h('div', { class: 'lt-inner' });
   const scroll = h('div', { class: 'lt-scroll' }, inner);
@@ -116,7 +138,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     if (guia != null) kids.push(h('i', { class: 'lt-guia', style: `left:${xDe(guia)}px` }));
     kids.push(h('b', { class: 'lt-cabeza' }));
     inner.replaceChildren(...kids);
-    pintarOnda(); pintarAccion(); cabeza(true);
+    pintarOnda(); pintarAccion(); cabeza(true); syncZoom();
   }
   const hoyPalabras = () => pxs >= 80;
   function pintarOnda() {
@@ -146,6 +168,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     const v = getVideo(), t = tArrastre != null ? tArrastre : v ? v.currentTime || 0 : 0, ph = inner.querySelector('.lt-cabeza');
     if (ph) ph.style.transform = `translateX(${xDe(t)}px)`;
     info.textContent = `${mmss(t, 1)} / ${mmss(dur(), 1)}`;
+    estadoTransporte();
     if (v && !v.paused && !forzar) { const x = xDe(t); if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth - 20) scroll.scrollLeft = Math.max(0, x - 40); }
   }
   function bucle() { if (destruido || !el.isConnected) { if (!destruido) raf = requestAnimationFrame(bucle); return; } cabeza(); raf = requestAnimationFrame(bucle); }
@@ -265,6 +288,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   });
 
   setTimeout(pintar, 0);
-  const abrir = (v) => { if (v === abierto) return; abierto = v; el.classList.toggle('abierto', abierto); pintar(); };
-  return { el, pintar, abrir, destroy: () => { destruido = true; cancelAnimationFrame(raf); ro.disconnect(); } };
+  const abrir = (v) => { bOcultar.innerHTML = chev(!v); bOcultar.title = v ? 'Ocultar la línea de tiempo' : 'Mostrar la línea de tiempo'; if (v === abierto) return; abierto = v; el.classList.toggle('abierto', abierto); pintar(); };
+  const natural = () => ALTO + barra.offsetHeight + 24;  // alto que ocupa la línea de tiempo completa
+  return { el, pintar, abrir, natural, destroy: () => { destruido = true; cancelAnimationFrame(raf); ro.disconnect(); } };
 }

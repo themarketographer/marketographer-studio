@@ -3,15 +3,15 @@ export const dbDe = (pico) => 20 * Math.log10(Math.max(pico, 1e-6));
 export const lufsDe = (ms) => -0.691 + 10 * Math.log10(Math.max(ms, 1e-10));
 // node -e "import('./meter.js').then(m=>{console.assert(Math.abs(m.dbDe(0.5)+6.02)<0.01);console.assert(Math.abs(m.lufsDe(1)+0.691)<0.01)})"
 
-const MIN = -60, MARCAS = [-6, -12, -18, -24, -36, -48];
+const MIN = -60, MARCAS = [-6, -18, -36, -54];
 const fmt = (n) => (n > -70 ? n.toFixed(1).replace('.', ',').replace('-', '−') : '—');
 
 export function crearMedidor({ h, fuente }) {
   const W = 44, H = 220, dpr = window.devicePixelRatio || 1;
   const cv = h('canvas', { width: W * dpr, height: H * dpr, style: `width:${W}px;height:${H}px`, 'aria-hidden': 'true' });
   const g = cv.getContext('2d');
-  const txt = h('p', { class: 'med-txt', role: 'status', 'aria-label': 'Volumen del sonido' }, 'Sin sonido');
-  const el = h('div', { class: 'medidor' }, cv, txt, h('p', { class: 'hint' }, 'Para redes: cerca de −14'));
+  const txt = h('p', { class: 'med-txt', role: 'status', 'aria-label': 'Volumen del sonido en LUFS' }, '—');
+  const el = h('div', { class: 'medidor', title: 'Volumen del sonido. Para redes, cerca de −14 LUFS. Si el punto se pone rojo, el sonido saturó (toca para apagarlo).' }, cv, txt);
   let nodos = null, fuenteAc = null, raf = 0, sat = false, cierra = false;
   const nivel = [0, 0], retenido = [MIN, MIN], tRet = [0, 0], hist = [];
   let tPrev = performance.now();
@@ -53,8 +53,8 @@ export function crearMedidor({ h, fuente }) {
       hist.push([now, 2 * s / n]);
       while (hist.length && now - hist[0][0] > 3000) hist.shift();
       const corto = hist.reduce((a, x) => a + x[1], 0) / hist.length;
-      txt.textContent = `Ahora ${fmt(lufsDe(hist[hist.length - 1][1]))} LUFS · Promedio ${fmt(lufsDe(corto))}`;
-    } else { nivel[0] = Math.max(MIN, nivel[0] - 20 * dt); nivel[1] = Math.max(MIN, nivel[1] - 20 * dt); txt.textContent = 'Sin sonido'; }
+      txt.textContent = `${fmt(lufsDe(corto))}`; txt.title = `Ahora ${fmt(lufsDe(hist[hist.length - 1][1]))} LUFS · Promedio ${fmt(lufsDe(corto))}`;
+    } else { nivel[0] = Math.max(MIN, nivel[0] - 20 * dt); nivel[1] = Math.max(MIN, nivel[1] - 20 * dt); txt.textContent = '—'; }
     pintar();
     raf = requestAnimationFrame(cuadro);
   }
@@ -63,7 +63,7 @@ export function crearMedidor({ h, fuente }) {
     const css = getComputedStyle(el), col = (v) => css.getPropertyValue(v).trim() || '#888';
     const y = (db) => H - 14 - ((Math.max(db, MIN) - MIN) / -MIN) * (H - 20);
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-    g.font = '8px system-ui'; g.fillStyle = col('--muted'); g.strokeStyle = col('--line');
+    g.font = '9px system-ui'; g.fillStyle = col('--muted'); g.strokeStyle = col('--line');
     for (const m of MARCAS) { g.beginPath(); g.moveTo(0, y(m)); g.lineTo(W, y(m)); g.stroke(); g.fillText(String(m), W / 2 - 8, y(m) - 1); }
     [0, 1].forEach((i) => {
       const x = 4 + i * 22;
