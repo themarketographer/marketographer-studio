@@ -1,6 +1,6 @@
 # Estudio Marketographer
 
-Herramienta local para convertir tus clases en guiones y, más adelante, editar tus videos con tu estilo.
+Herramienta local (Mac y Windows) para convertir tus clases en guiones y, más adelante, editar tus videos con tu estilo.
 
 ## Instalar en tu Mac
 **Lo más fácil: pídeselo a tu Claude.** Pégale esto:
@@ -9,13 +9,19 @@ Herramienta local para convertir tus clases en guiones y, más adelante, editar 
 
 Las instrucciones completas (y qué hacer si algo falla) están en [INSTALAR-CON-CLAUDE.md](INSTALAR-CON-CLAUDE.md).
 
-**Sin Claude, un comando en Terminal.** Crea la app en Aplicaciones:
+**Sin Claude, un comando.** Funciona en Mac y en Windows 10 u 11.
+
+Mac (Terminal):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/themarketographer/marketographer-studio/main/instalar.sh | bash
 ```
-No hace falta tener Homebrew, Node ni Python: todo se baja solo (~1,5 GB la primera vez) y queda dentro de `~/EstudioMarketographer`. Para actualizar, pega el mismo comando (o acepta el aviso al abrir la app). Tus videos viven en `~/EstudioMarketographer/data` y no se tocan.
+Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/themarketographer/marketographer-studio/main/instalar.ps1 | iex
+```
+No hace falta tener Homebrew, Node, Python ni Git: todo se baja solo (~1,5 GB la primera vez) y queda dentro de la carpeta `EstudioMarketographer` de tu usuario. En Mac crea la app en Aplicaciones; en Windows, un acceso directo en el escritorio y en el menú Inicio. Para actualizar, pega el mismo comando (o acepta el aviso al abrir la app). Tus videos viven en `EstudioMarketographer/data` y no se tocan.
 
-**O el instalable (.dmg).** Descárgalo de la sección *Releases*, arrastra la app a Aplicaciones y ábrela (la primera vez: clic derecho > Abrir). Se prepara sola y después abre en segundos, sin internet. Avisa cuando hay una versión nueva.
+**Solo Mac: el instalable (.dmg).** Descárgalo de la sección *Releases*, arrastra la app a Aplicaciones y ábrela (la primera vez: clic derecho > Abrir). Se prepara sola y después abre en segundos, sin internet. Avisa cuando hay una versión nueva.
 
 **Para quien arma el instalable:** `bash empaquetar/construir.sh` crea el .dmg en `dist/`.
 
@@ -23,8 +29,8 @@ No hace falta tener Homebrew, Node ni Python: todo se baja solo (~1,5 GB la prim
 ```bash
 git clone https://github.com/themarketographer/marketographer-studio.git
 cd marketographer-studio
-bash preparar.sh   # una vez: Node, Python, librerías y modelos del motor de video
-bash Iniciar.command
+bash preparar.sh   # una vez (en Windows: powershell -ExecutionPolicy Bypass -File preparar.ps1)
+bash Iniciar.command   # en Windows: Estudio.ps1
 ```
 La carpeta `data/` se crea sola con tus propios guiones.
 
@@ -194,3 +200,6 @@ Ralentizar frases con voz baja, tipografía elástica, lista de puntos que desen
 
 ## Pendiente
 - Tipografía Izmir: falta el archivo. Copia el .otf o .ttf en modules/talking-head/engine/fonts y aparece sola en los selectores.
+
+## Probar la instalación (para quien mantiene el proyecto)
+En GitHub, pestaña *Actions* → *Probar instalación (Mac y Windows)* → *Run workflow*. Instala desde cero en una Mac y en un Windows limpios, sube un video de prueba, lo analiza y genera la vista previa. Para probar a mano en Windows: `empaquetar/probar_instalacion.py`.
