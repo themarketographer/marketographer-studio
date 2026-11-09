@@ -1,0 +1,72 @@
+name: Probar instalación (Mac y Windows)
+# Instala el Estudio desde cero como lo haría un alumno y comprueba que el motor sube, analiza y genera un video.
+on:
+  workflow_dispatch:
+  push:
+    branches: [windows]
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar con el comando de los alumnos (sin Node instalado)
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+          ESTUDIO_SIN_ATAJOS: '1'
+          ESTUDIO_RAMA: ${{ github.ref_name }}
+        run: |
+          $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -notmatch 'nodejs' }) -join ';'
+          if (Get-Command node -ErrorAction SilentlyContinue) { throw 'Node sigue en el PATH' }
+          irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/instalar.ps1" | iex
+      - name: Probar el motor (subir, analizar, generar)
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+          STUDIO_PY: ${{ runner.temp }}\estudio\.venv\Scripts\python.exe
+        run: |
+          & "$env:ESTUDIO_DIR\.venv\Scripts\python.exe" empaquetar\probar_instalacion.py "$env:ESTUDIO_DIR" "$env:ESTUDIO_DIR\.runtime\node\node.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'La prueba del motor falló' }
+      - name: Probar el lanzador (Estudio.ps1)
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+          ESTUDIO_AUTO: '1'
+          ESTUDIO_SIN_ACTUALIZAR: '1'
+        run: |
+          $out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$env:ESTUDIO_DIR\Estudio.ps1"
+          Write-Host $out
+          if (($out -join ' ') -notmatch 'Servidor listo') { throw 'El lanzador no arrancó el servidor' }
+      - name: Probar los accesos directos (segunda pasada del instalador, ya instalado)
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+          ESTUDIO_RAMA: ${{ github.ref_name }}
+        run: |
+          irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/instalar.ps1" | iex
+          $d = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Estudio Marketographer.lnk'
+          $m = Join-Path ([Environment]::GetFolderPath('Programs')) 'Estudio Marketographer.lnk'
+          foreach ($f in @($d, $m)) { if (-not (Test-Path $f)) { throw "Falta el acceso directo $f" } }
+          $a = (New-Object -ComObject WScript.Shell).CreateShortcut($d)
+          Write-Host "Destino: $($a.TargetPath) $($a.Arguments)  Icono: $($a.IconLocation)"
+          if (-not (Test-Path "$env:ESTUDIO_DIR\web\logo.ico")) { throw 'Falta el icono' }
+      - name: Registro del servidor si algo falló
+        if: failure()
+        shell: powershell
+        run: Get-ChildItem "${{ runner.temp }}\estudio_prueba" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "== $($_.Name)"; if ($_.Name -like '*.log') { Get-Content $_.FullName -Tail 60 } }
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar con el comando de los alumnos
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}/estudio
+          ESTUDIO_SIN_APP: '1'
+          ESTUDIO_RAMA: ${{ github.ref_name }}
+        run: curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/instalar.sh" | bash
+      - name: Probar el motor (subir, analizar, generar)
+        env:
+          STUDIO_PY: ${{ runner.temp }}/estudio/.venv/bin/python
+        run: ${{ runner.temp }}/estudio/.venv/bin/python empaquetar/probar_instalacion.py "${{ runner.temp }}/estudio" "$(command -v node)"

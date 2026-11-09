@@ -9,6 +9,8 @@ import { createStore } from './lib/store.js';
 import { createRouter } from './lib/router.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Los procesos de Python heredan esto: en Windows, sin esto leen y escriben los acentos en cp1252.
+process.env.PYTHONUTF8 = '1'; process.env.PYTHONIOENCODING = 'utf-8';
 const PORT = Number(process.env.PORT || 4177);
 const store = createStore(path.join(ROOT, 'data'));
 

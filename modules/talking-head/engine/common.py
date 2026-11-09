@@ -71,7 +71,7 @@ def correr_tramos(proj, accion, tramos, extra, total, avance, destino, simultane
             time.sleep(0.25)
         if pendientes or any(pr.returncode for pr in procs):
             raise RuntimeError(f"Falló uno de los tramos ({accion}).")
-        lista.write_text("".join(f"file '{parte}'\n" for parte in partes))
+        lista.write_text("".join(f"file '{Path(parte).as_posix()}'\n" for parte in partes), encoding="utf-8")
         subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lista), "-c", "copy", str(destino)], check=True)
     finally:
         for pr in procs:
