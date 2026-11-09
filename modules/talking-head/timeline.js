@@ -16,7 +16,7 @@ export function imanar(t, puntos, tol) {
 }
 // node -e "import('./timeline.js').then(m=>{console.assert(m.imanar(1.02,[0,1,2],0.05)===1);console.assert(m.imanar(1.5,[0,1,2],0.05)===1.5);console.assert(m.imanar(3,[],1)===3)})"
 
-export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr }) {
+export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], getPlan, getWords, getEnv, getVideo, kinds = {}, unirR, irPaso, onCambio, onSeleccion = () => {}, onIr, onAlternar = () => {} }) {
   let pxs = 40, ajustar = true, sel = null, rango = null, iman = true, abierto = true, raf = 0, destruido = false, guia = null;
   try { abierto = localStorage.getItem('estudio.timeline') !== '0'; } catch { /* sin memoria */ }
   const dur = () => getPlan().duration || 1;
@@ -25,10 +25,27 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   const info = h('span', { class: 'lt-t' }, '0:00.00 / 0:00.00');
   const accion = h('span', { class: 'lt-acc' });
   const btn = (txt, tit, fn, cls = '') => h('button', { type: 'button', class: 'btn ghost sm ' + cls, title: tit, 'aria-label': tit, onclick: fn }, txt);
-  const bImn = btn('Imán', 'Pegar a palabras y bordes (tecla S)', () => { iman = !iman; bImn.classList.toggle('on', iman); bImn.setAttribute('aria-pressed', String(iman)); }, 'on');
-  bImn.setAttribute('aria-pressed', 'true');
-  const bAbrir = btn('', 'Mostrar u ocultar la línea de tiempo', () => { abierto = !abierto; try { localStorage.setItem('estudio.timeline', abierto ? '1' : '0'); } catch { /* sin memoria */ } el.classList.toggle('abierto', abierto); pintar(); }, 'lt-abrir');
-  const barra = h('div', { class: 'lt-barra' }, bAbrir, btn('−', 'Alejar', () => zoom(0.7)), btn('+', 'Acercar', () => zoom(1.4)), btn('Ajustar', 'Ver todo el video', () => { ajustar = true; pintar(); }), bImn, barraExtra, accion, info);
+  // Menú de opciones tipo ventana flotante: interruptores con icono, como en los editores de video.
+  const svg = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const filaPop = (icono, titulo, nota, get, set) => {
+    const sw = h('span', { class: 'pop-sw' + (get() ? ' on' : ''), 'aria-hidden': 'true' }, h('i'));
+    const b = h('button', { type: 'button', role: 'switch', class: 'pop-fila', 'aria-checked': String(!!get()), onclick: () => { set(!get()); sw.classList.toggle('on', !!get()); b.setAttribute('aria-checked', String(!!get())); } },
+      h('span', { class: 'pop-ic', html: svg(icono) }), h('span', { class: 'pop-tx' }, h('strong', {}, titulo), nota ? h('small', {}, nota) : null), sw);
+    b.sync = () => { sw.classList.toggle('on', !!get()); b.setAttribute('aria-checked', String(!!get())); };
+    return b;
+  };
+  const fImn = filaPop('<path d="M6 15V9a6 6 0 0112 0v6"/><path d="M6 15h3M15 15h3"/>', 'Imán', 'Pega los bloques a las palabras y a los bordes. Con Alt los mueves libres.', () => iman, (v) => { iman = v; });
+  const fAj = filaPop('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>', 'Ver todo el video', 'La línea de tiempo se ajusta al ancho de la pantalla.', () => ajustar, (v) => { ajustar = v; if (v) pintar(); });
+  const pop = h('div', { class: 'pop pop-arriba', hidden: true, role: 'dialog', 'aria-label': 'Opciones de la línea de tiempo' }, fImn, fAj);
+  const cerrarPop = () => { pop.hidden = true; document.removeEventListener('pointerdown', fueraPop, true); document.removeEventListener('keydown', escPop, true); };
+  const fueraPop = (e) => { if (!pop.parentElement.contains(e.target)) cerrarPop(); };
+  const escPop = (e) => { if (e.key === 'Escape') cerrarPop(); };
+  const bOpc = h('button', { type: 'button', class: 'btn ghost sm lt-opc', title: 'Opciones de la línea de tiempo', 'aria-label': 'Opciones de la línea de tiempo', 'aria-haspopup': 'dialog',
+    html: svg('<path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2"/><circle cx="9" cy="16" r="2"/>') + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+    onclick: () => { if (pop.hidden) { fImn.sync(); fAj.sync(); pop.hidden = false; document.addEventListener('pointerdown', fueraPop, true); document.addEventListener('keydown', escPop, true); } else cerrarPop(); } });
+  const bPop = h('div', { class: 'pop-wrap' }, bOpc, pop);
+  const bPlay = h('button', { type: 'button', class: 'lt-play', title: 'Reproducir o pausar (espacio)', 'aria-label': 'Reproducir o pausar', onclick: onAlternar, html: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>' });
+  const barra = h('div', { class: 'lt-barra' }, bPlay, info, btn('−', 'Alejar', () => zoom(0.7)), btn('+', 'Acercar', () => zoom(1.4)), bPop, barraExtra, accion);
   const etiquetas = h('div', { class: 'lt-etq' }, PISTAS.map(([, n, y, a]) => h('span', { style: `top:${y}px;height:${a}px` }, n)));
   const inner = h('div', { class: 'lt-inner' });
   const scroll = h('div', { class: 'lt-scroll' }, inner);
@@ -238,7 +255,7 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
     const k = e.key, P = getPlan();
     if (k === 'Escape') { sel = null; rango = null; pintar(); }
     else if (k === 'Delete' || k === 'Backspace') borrarSel();
-    else if (k === 's' || k === 'S') bImn.click();
+    else if (k === 's' || k === 'S') { iman = !iman; fImn.sync(); }
     else if ((k === 'ArrowLeft' || k === 'ArrowRight') && sel && ['evento', 'zoom', 'lento', 'filtro'].includes(sel.tipo)) {
       const dt = (k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1) / (P.fps || 30), r = sel.ref;
       if (sel.tipo === 'zoom') aplicar(r, 'zoom', r.t + dt, r.t); else aplicar(r, sel.tipo, r.start + dt, r.end + dt);
@@ -248,5 +265,6 @@ export function crearTimeline({ h, barraExtra = null, getFiltros = () => [], get
   });
 
   setTimeout(pintar, 0);
-  return { el, pintar, destroy: () => { destruido = true; cancelAnimationFrame(raf); ro.disconnect(); } };
+  const abrir = (v) => { if (v === abierto) return; abierto = v; el.classList.toggle('abierto', abierto); pintar(); };
+  return { el, pintar, abrir, destroy: () => { destruido = true; cancelAnimationFrame(raf); ro.disconnect(); } };
 }

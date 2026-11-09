@@ -1,9 +1,9 @@
 // Cascarón del Estudio: lee los módulos del servidor, arma el menú y monta cada interfaz.
 const ICONS = {
-  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>',
-  video: '<rect x="2" y="6" width="14" height="12" rx="2"/><path d="M22 8l-6 4 6 4z"/>',
+  pen: '<path d="M4 20l1-4L16 5a2.1 2.1 0 013 3L8 19zM13.5 7.5l3 3"/>',
+  video: '<path d="M5 6h8a3 3 0 013 3v6a3 3 0 01-3 3H5a3 3 0 01-3-3V9a3 3 0 013-3zM16 11l6-3v8l-6-3z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><path d="M17 5a3.5 3.5 0 010 7M22 20c0-2.6-1.7-4.6-4-5.4"/>',
-  film: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>',
+  film: '<path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zM7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>',
   check: '<path d="M4 12l5 5L20 6"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>',
   play: '<path d="M7 4l13 8-13 8z"/>',
@@ -16,7 +16,7 @@ const ICONS = {
   folder: '<path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
 };
 export const icon = (name, size = 18) =>
-  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 export function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);

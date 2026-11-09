@@ -176,7 +176,28 @@ const ICN = {
   anim: 'M5 12h14M13 6l6 6-6 6', estrella: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.200 9.500l6.100-.9z', guardar: 'M5 4h12l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',
   mover: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3', izq: 'M15 5l-7 7 7 7', der: 'M9 5l7 7-7 7', check: 'M5 12l5 5 9-10', frases: 'M4 7h9M4 12h16M4 17h11M17 5l3 2-3 2', descargar: 'M12 4v12M7 11l5 5 5-5M5 20h14', mas: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18', play: 'M8 5v14l11-7z', lista: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
 };
-const ic = (n, sz = 18) => (ICN[n] ? `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICN[n]}"/></svg>` : '');
+// Iconos más redondos y gruesos, con un relleno suave detrás de la forma principal (se ven más "llenos" y fáciles de reconocer).
+Object.assign(ICN, {
+  doc: 'M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zM14 3v5h5M9 13h6M9 17h4',
+  subs: 'M6 5h12a3 3 0 013 3v8a3 3 0 01-3 3H6a3 3 0 01-3-3V8a3 3 0 013-3zM7 14h5M15 14h2',
+  titulos: 'M5 7V5h14v2M12 5v14M9 19h6',
+  camara: 'M4 9V6a2 2 0 012-2h3M15 4h3a2 2 0 012 2v3M20 15v3a2 2 0 01-2 2h-3M9 20H6a2 2 0 01-2-2v-3M12 10a2 2 0 100 4 2 2 0 000-4z',
+  formato: 'M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2zM9 10h6v4H9z',
+  look: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 3v18',
+  publicar: 'M12 15V4M8 8l4-4 4 4M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4',
+  fondo: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM3 16l5-5 4 4 3-3 6 6M8.5 8.5h.01',
+  imagen: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM3 16l5-5 4 4 3-3 6 6M8.5 8.5h.01',
+  pelicula: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM8 4v16M16 4v16M3 9h5M3 15h5M16 9h5M16 15h5',
+  mic: 'M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4',
+  elementos: 'M5 4h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zM15 4h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5a1 1 0 011-1zM5 14h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4a1 1 0 011-1zM15 14h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4a1 1 0 011-1z',
+});
+const ICN_F = {  // relleno suave detrás de la forma
+  doc: 'M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z', subs: 'M6 5h12a3 3 0 013 3v8a3 3 0 01-3 3H6a3 3 0 01-3-3V8a3 3 0 013-3z', formato: 'M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z',
+  look: 'M12 3a9 9 0 010 18z', fondo: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z', imagen: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z',
+  pelicula: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z', mic: 'M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3z', sol: 'M12 8a4 4 0 100 8 4 4 0 000-8z', reloj: 'M12 4a8 8 0 100 16 8 8 0 000-16z',
+  gota: 'M12 3s6 6 6 10a6 6 0 01-12 0c0-4 6-10 6-10z', llama: 'M12 3c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z', camara: 'M12 10a2 2 0 100 4 2 2 0 000-4z',
+};
+const ic = (n, sz = 18) => (ICN[n] ? `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICN_F[n] ? `<path d="${ICN_F[n]}" fill="currentColor" fill-opacity=".16" stroke="none"/>` : ''}<path d="${ICN[n]}"/></svg>` : '');
 // Cada etiqueta recibe el ícono que mejor dice qué está modificando.
 const ICONO_DE = [
   [/filtro/, 'filtros'],
@@ -665,8 +686,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   async function guardarYa() { clearTimeout(S.guardar); await api(`${A}/proyectos/${S.p.id}/plan`, { method: 'PUT', body: plan() }); }
 
   // ---------- Espacio de trabajo (como los paneles acoplables de FilmCraft): video | ajustes | línea de tiempo, con divisores que se arrastran ----------
-  const DISENOS = { edicion: ['Edición', 420, 300], video: ['Video grande', 560, 230], tiempo: ['Línea de tiempo grande', 330, 460] };
-  const leerDiseno = () => { try { return { ...{ v: 420, h: null }, ...JSON.parse(localStorage.getItem('estudio.layout') || '{}') }; } catch { return { v: 420, h: null }; } };  // h null = automática (un tercio de la altura)
+  const leerDiseno = () => { try { return { ...{ v: 500, h: null }, ...JSON.parse(localStorage.getItem('estudio.layout') || '{}') }; } catch { return { v: 500, h: null }; } };  // h null = automática (un tercio de la altura)
   const guardarDiseno = (d) => { try { localStorage.setItem('estudio.layout', JSON.stringify(d)); } catch { /* sin memoria */ } };
   function espacioDeTrabajo(ed) {
     const D = leerDiseno();
@@ -674,28 +694,28 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       const r = ed.getBoundingClientRect();
       const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--esc')) || 0.9;  // la interfaz está escalada: las alturas se miden en píxeles de diseño
       ed.style.setProperty('--ws-top', `${Math.round((r.top + window.scrollY) / z)}px`);
-      ed.style.setProperty('--col-video', `${Math.max(260, Math.min(D.v, ed.clientWidth - 380))}px`);
+      ed.style.setProperty('--col-video', `${Math.max(340, Math.min(D.v, ed.clientWidth - 380))}px`);
+      if (timeline && timeline.abrir) timeline.abrir((D.h ?? 999) > 70);  // arrastrar el divisor hasta abajo la oculta; hacia arriba la muestra
       ed.style.setProperty('--alto-tl', `${Math.round(Math.max(130, Math.min(D.h ?? window.innerHeight * 0.34 / z, window.innerHeight * 0.45 / z)))}px`);  // la línea de tiempo nunca se come más del 45 % de la altura
     };
     aplicar();
     const arrastrar = (div, eje) => div.addEventListener('pointerdown', (e) => {
       e.preventDefault(); try { div.setPointerCapture(e.pointerId); } catch { /* sin captura, se sigue con los eventos del divisor */ } div.classList.add('on');
       const x0 = e.clientX, y0 = e.clientY, v0 = D.v, h0 = D.h ?? Math.round(window.innerHeight * 0.34);
-      const mover = (ev) => { if (eje === 'v') D.v = v0 + (ev.clientX - x0); else D.h = (h0 ?? D.h ?? 300) - (ev.clientY - y0); aplicar(); if (timeline) timeline.pintar(); };
+      const mover = (ev) => { if (eje === 'v') D.v = v0 + (ev.clientX - x0); else D.h = Math.max(0, (h0 ?? D.h ?? 300) - (ev.clientY - y0)); aplicar(); if (timeline) timeline.pintar(); };
       const fin = () => { div.classList.remove('on'); div.removeEventListener('pointermove', mover); div.removeEventListener('pointerup', fin); guardarDiseno(D); };
       div.addEventListener('pointermove', mover); div.addEventListener('pointerup', fin);
     });
     const teclas = (div, eje) => div.addEventListener('keydown', (e) => {
       const paso = e.shiftKey ? 60 : 20, d = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -paso : e.key === 'ArrowRight' || e.key === 'ArrowDown' ? paso : 0;
       if (!d) return; e.preventDefault();
-      if (eje === 'v') D.v += d; else D.h = (D.h ?? Math.round(window.innerHeight * 0.34)) - d; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar();
+      if (eje === 'v') D.v += d; else D.h = Math.max(0, (D.h ?? Math.round(window.innerHeight * 0.34)) - d); aplicar(); guardarDiseno(D); if (timeline) timeline.pintar();
     });
     const mk = (eje, rol) => h('div', { class: `ws-div ws-div-${eje}`, role: 'separator', 'aria-orientation': eje === 'v' ? 'vertical' : 'horizontal', tabindex: '0', title: 'Arrastra para cambiar el tamaño. Doble clic para volver al tamaño de siempre.',
-      'aria-label': rol, ondblclick: () => { D[eje] = eje === 'v' ? 420 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); } });
-    const dv = mk('v', 'Tamaño del video'), dh = mk('h', 'Tamaño de la línea de tiempo');
+      'aria-label': rol, ondblclick: () => { D[eje] = eje === 'v' ? 500 : null; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); } });
+    const dv = mk('v', 'Ancho del panel'), dh = mk('h', 'Tamaño de la línea de tiempo');
     arrastrar(dv, 'v'); arrastrar(dh, 'h'); teclas(dv, 'v'); teclas(dh, 'h');
     ed.append(dv, dh);
-    ed._diseno = (clave) => { const [, v, hh] = DISENOS[clave]; D.v = v; D.h = hh; aplicar(); guardarDiseno(D); if (timeline) timeline.pintar(); };
     if (wsResize) removeEventListener('resize', wsResize);
     wsResize = () => { if (ed.isConnected) { aplicar(); if (timeline) timeline.pintar(); } };
     addEventListener('resize', wsResize);
@@ -734,8 +754,8 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     root.style.setProperty('--asp', FMT_ASP[(S.p.plan && S.p.plan.formato) || '9x16']);
     S.anchoAncho = window.innerWidth >= 900;  // con qué diseño se pintó: si la ventana cruza los 900 px se vuelve a pintar
     const ed = h('div', { class: 'ed ' + (S.vista || 'normal') + (S.p.plan && S.p.plan.formato === '16x9' && S.tab !== 'source' ? ' ancho' : '') + (window.innerWidth >= 900 ? ' ws' : '') }, columnaVideo(), colSet(), timeline ? timeline.el : null);
-    root.replaceChildren(cab, titulo, ed);
-    if (ed.classList.contains('ws')) espacioDeTrabajo(ed);
+    if (ed.classList.contains('ws')) { titulo.className = 'cab-titulo'; cab.insertBefore(titulo, cab.children[1]); cab.insertBefore(buscadorHerramientas(), cab.lastElementChild); root.replaceChildren(cab, ed); espacioDeTrabajo(ed); }
+    else root.replaceChildren(cab, titulo, ed);
     decorar(root);
     if (S.panel) montarHoja();
   }
@@ -844,7 +864,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     let medidorOn = true; try { medidorOn = localStorage.getItem('estudio.medidor') !== '0'; } catch { /* sin memoria */ }
     if (S.tab === 'live' && medidorOn) medidor = crearMedidor({ h, fuente: () => live && live.medidor && live.medidor() });
     if (S.tab === 'live') {
-      timeline = crearTimeline({ h, barraExtra: window.innerWidth >= 900 ? h('select', { class: 'tl-diseno', 'aria-label': 'Diseño de la pantalla', title: 'Diseño de la pantalla', onchange: (e) => { document.querySelector('.ed.ws')?._diseno(e.target.value); e.target.value = ''; } }, h('option', { value: '' }, 'Diseño ▾'), ...Object.entries(DISENOS).map(([k, v]) => h('option', { value: k }, v[0]))) : null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
+      timeline = crearTimeline({ h, barraExtra: null, getFiltros: () => FILTROS, getPlan: plan, getWords: () => S.p.palabras || [], getEnv: () => S.env, getVideo: () => video, kinds: KINDS, unirR, irPaso, onCambio: () => cambio(), onAlternar: () => { if (live) live.alternar(); }, onIr: (t) => { if (live) live.ir(t); if (S.panel === 'propiedades' && S.selTL && S.selTL.ref && S.selTL.ref.kf) pintarPanel(); }, onSeleccion: (sel) => { S.selTL = sel; if (sel) abrirHoja('propiedades'); else if (S.panel === 'propiedades') pintarPanel(); } });
       if (!S.env) api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (timeline) timeline.pintar(); }).catch(() => {});
     }
     const pantallaYMedidor = medidor ? h('div', { class: 'pantalla-y-medidor' }, phone, medidor.el) : phone;
@@ -960,6 +980,35 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         sig ? h('button', { type: 'button', class: 'btn gold', onclick: () => irPaso(sig.id), html: `${sig.n} ` + ic('der', 16) }) : h('span')));
     setTimeout(() => { if (P.inline) pintarPanel(); else pintarTiles(); decorar(col); }, 0);
     return col;
+  }
+  // "Buscar herramienta": escribes y saltas directo a la tarjeta (como en los editores de video).
+  function abrirTarjeta(id) {
+    const paso = PASOS.find((x) => (x.tiles || []).includes(id));
+    if (paso && S.paso !== paso.id) irPaso(paso.id);
+    abrirHoja(id);
+  }
+  function buscadorHerramientas() {
+    const inp = h('input', { type: 'search', class: 'buscar-inp', placeholder: 'Buscar herramienta', 'aria-label': 'Buscar herramienta', autocomplete: 'off', spellcheck: 'false' });
+    const lista = h('div', { class: 'pop buscar-lista', hidden: true, role: 'listbox' });
+    const todas = () => [
+      ...tarjetasVisibles().map((t) => ({ n: t.n, r: t.r, ir: () => abrirTarjeta(t.id) })),
+      ...PASOS.map((x) => ({ n: x.n, r: 'Paso ' + (PASOS.indexOf(x) + 1), ir: () => irPaso(x.id) })),
+      { n: 'Ajustes', r: 'Tamaño de pantalla, vocabulario y copias', ir: () => abrirHoja('ajustes') },
+      { n: 'Exportar', r: 'Elegir formatos y exportar', ir: () => abrirHoja('exportar') },
+    ];
+    const cerrar = () => { lista.hidden = true; inp.value = ''; };
+    const pintarLista = () => {
+      const q = plano(inp.value.trim());
+      if (!q) { lista.hidden = true; return; }
+      const hit = todas().filter((t) => plano(t.n + ' ' + t.r).includes(q)).slice(0, 7);
+      lista.replaceChildren(...(hit.length ? hit.map((t) => h('button', { type: 'button', role: 'option', class: 'buscar-it', onclick: () => { cerrar(); t.ir(); } }, h('strong', {}, t.n), h('small', {}, t.r))) : [h('p', { class: 'buscar-vacio' }, 'No encontré nada con eso.')]));
+      lista.hidden = false; lista._primero = hit[0];
+    };
+    inp.addEventListener('input', pintarLista);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Escape') { cerrar(); inp.blur(); } else if (e.key === 'Enter' && lista._primero) { const t = lista._primero; cerrar(); t.ir(); } });
+    document.addEventListener('pointerdown', (e) => { if (!lista.hidden && !wrap.contains(e.target)) cerrar(); }, true);
+    const wrap = h('div', { class: 'buscar' }, inp, lista);
+    return wrap;
   }
   function irPaso(id) {
     if (S.panel) cerrarHoja();
