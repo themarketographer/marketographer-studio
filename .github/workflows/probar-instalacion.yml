@@ -43,7 +43,7 @@ jobs:
         shell: powershell
         run: Get-ChildItem "${{ runner.temp }}\estudio_prueba" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "== $($_.Name)"; if ($_.Name -like '*.log') { Get-Content $_.FullName -Tail 60 } }
   mac:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
