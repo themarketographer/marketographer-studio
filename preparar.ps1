@@ -33,7 +33,7 @@ else {
 }
 if ($nodeOk) { if (Test-Path $NodeExe) { Write-Host 'Listo.' } }
 else {
-  try { $sumas = (Invoke-WebRequest -UseBasicParsing -Uri 'https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt').Content } catch { Falla 'No pude consultar nodejs.org. Revisa tu internet.' }
+  try { $sumas = (Invoke-WebRequest -UseBasicParsing -Uri 'https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt').Content; if ($sumas -is [byte[]]) { $sumas = [Text.Encoding]::ASCII.GetString($sumas) } } catch { Falla 'No pude consultar nodejs.org. Revisa tu internet.' }
   $linea = ($sumas -split "`n" | Where-Object { $_ -match "win-$NodeArq\.zip" } | Select-Object -First 1)
   if (-not $linea) { Falla 'No encontré Node para este equipo.' }
   $parts = $linea.Trim() -split '\s+'; $suma = $parts[0]; $archivo = $parts[1]
@@ -52,7 +52,7 @@ if (Test-Path $Uv) { Write-Host 'Listo.' }
 else {
   $u = "uv-$UvArq-pc-windows-msvc.zip"; $base = 'https://github.com/astral-sh/uv/releases/latest/download'
   Baja "$base/$u" "$RT\$u"
-  try { $suma = ((Invoke-WebRequest -UseBasicParsing -Uri "$base/$u.sha256").Content -split '\s+')[0] } catch { $suma = '' }
+  try { $c = (Invoke-WebRequest -UseBasicParsing -Uri "$base/$u.sha256").Content; if ($c -is [byte[]]) { $c = [Text.Encoding]::ASCII.GetString($c) }; $suma = ($c.Trim() -split '\s+')[0] } catch { $suma = '' }
   if ($suma) { Verifica "$RT\$u" $suma }
   Remove-Item "$RT\uvtmp" -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force -Path "$RT\uvtmp" | Out-Null
   tar -xf "$RT\$u" -C "$RT\uvtmp"
