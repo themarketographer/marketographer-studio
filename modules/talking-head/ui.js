@@ -1283,8 +1283,9 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       const nuevo = tgt.dataset.panel !== id; tgt.dataset.panel = id; tgt.classList.toggle('primera', nuevo);
       tgt.replaceChildren(...x.flat().filter(Boolean), ...(pie ? [pie] : [])); decorar(tgt); plegables(tgt, id);
     };
-    const r = HOJAS[id][2]();
-    if (r && typeof r.then === 'function') r.then(pintarEn); else pintarEn(r);
+    const falla = (e) => { if ((S.panel || S.inline) !== id) return; tgt.replaceChildren(h('section', { class: 'card' }, h('p', { class: 'sub vivo' }, `No pude cargar esta función: ${(e && e.message) || e}`), h('button', { type: 'button', class: 'btn gold sm', onclick: () => pintarPanel() }, 'Reintentar'))); };
+    let r; try { r = HOJAS[id][2](); } catch (e) { return falla(e); }
+    if (r && typeof r.then === 'function') r.then(pintarEn).catch(falla); else pintarEn(r);
   }
   // Tarjetas largas: la primera abierta y el resto plegadas. Se recuerda lo que abres aunque el panel se repinte.
   const PESTANAS = new Set(['subs', 'titulos', 'frases']);
@@ -1847,7 +1848,11 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
     const cont = h('div', { class: 'panel-in' });
     if (!S.env) {
       cont.append(h('section', { class: 'card' }, h('p', { class: 'sub vivo' }, 'Leyendo el audio de tu video...')));
-      api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; if (enRecorte()) pintarPanel(); }).catch((e) => toast(e.message));
+      if (S.envError) {
+        cont.replaceChildren(h('section', { class: 'card' }, h('p', { class: 'sub vivo' }, S.envError), h('button', { type: 'button', class: 'btn gold sm', onclick: () => { S.envError = null; pintarPanel(); } }, 'Reintentar')));
+        return [cont];
+      }
+      api(`${A}/proyectos/${S.p.id}/envolvente`).then((e) => { S.env = e; S.envError = null; if (enRecorte()) pintarPanel(); }).catch((e) => { S.envError = e.message || 'No pude leer el audio.'; if (enRecorte()) pintarPanel(); });
       return [cont];
     }
     const env = S.env, palabras = S.p.palabras || [], hop = env.hop || 0.01;

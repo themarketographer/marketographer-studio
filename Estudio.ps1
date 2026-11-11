@@ -36,6 +36,13 @@ if (-not $listo) {
   if (-not (Test-Path "$RT\listo")) { Dialogo "No pude terminar de preparar el Estudio.`n`n$(if (Test-Path "$RT\error") { Get-Content "$RT\error" -Raw })`nRevisa tu internet y vuelve a abrirlo." | Out-Null; return }
 }
 
+# Servidor y ventana: se arranca primero y mientras tanto se mira si hay versión nueva (así no se espera dos veces)
+function Responde { try { $c = New-Object Net.Sockets.TcpClient; $ar = $c.BeginConnect('127.0.0.1', $Port, $null, $null); $ok = $ar.AsyncWaitHandle.WaitOne(300) -and $c.Connected; $c.Close(); [bool]$ok } catch { $false } }
+$Node = if (Test-Path "$RT\node\node.exe") { "$RT\node\node.exe" } else { (Get-Command node).Source }
+New-Item -ItemType Directory -Force -Path "$Root\data" | Out-Null
+$server = $null
+function Iniciar-Servidor { if (-not (Responde)) { $script:server = Start-Process -FilePath $Node -ArgumentList 'server\index.js' -WorkingDirectory $Root -WindowStyle Hidden -PassThru -RedirectStandardOutput "$Root\data\estudio.log" -RedirectStandardError "$Root\data\estudio-err.log" } }
+Iniciar-Servidor
 # ¿Hay una versión nueva en GitHub? (solo si hay internet; no estorba si no)
 if (-not $env:ESTUDIO_SIN_ACTUALIZAR) {
   try {
@@ -44,21 +51,14 @@ if (-not $env:ESTUDIO_SIN_ACTUALIZAR) {
     $omitida = if (Test-Path "$Guarda\no-actualizar") { (Get-Content "$Guarda\no-actualizar" -Raw).Trim() } else { '' }
     if ($remota -and (Mas-Nueva $remota $local) -and $omitida -ne $remota) {
       $r = Dialogo "Hay una versión nueva del Estudio ($remota). Tus videos no se tocan.`n`n¿Actualizar ahora?" 'YesNoCancel'
-      if ($r -eq 'Yes') { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Root\actualizar.ps1"; Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$Root\preparar.ps1`"" -Wait }
+      if ($r -eq 'Yes') { if ($server) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue; $server = $null; Start-Sleep -Milliseconds 500 }; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Root\actualizar.ps1"; Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$Root\preparar.ps1`"" -Wait; Iniciar-Servidor }
       elseif ($r -eq 'No') { Set-Content "$Guarda\no-actualizar" $remota }
     }
   } catch {}
 }
 
-# Servidor y ventana
-$Node = if (Test-Path "$RT\node\node.exe") { "$RT\node\node.exe" } else { (Get-Command node).Source }
-New-Item -ItemType Directory -Force -Path "$Root\data" | Out-Null
-$server = $null
-function Responde { try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 -Uri $Url).StatusCode -eq 200 } catch { $false } }
-if (-not (Responde)) {
-  $server = Start-Process -FilePath $Node -ArgumentList 'server\index.js' -WorkingDirectory $Root -WindowStyle Hidden -PassThru -RedirectStandardOutput "$Root\data\estudio.log" -RedirectStandardError "$Root\data\estudio-err.log"
-  for ($i = 0; $i -lt 60 -and -not (Responde); $i++) { Start-Sleep -Milliseconds 250 }
-}
+for ($i = 0; $i -lt 120 -and -not (Responde); $i++) { Start-Sleep -Milliseconds 250 }
+
 if ($env:ESTUDIO_AUTO) { Write-Output "Servidor listo en $Url"; if ($server) { Stop-Process -Id $server.Id -Force }; return }  # modo de pruebas: sin ventana
 
 $nav = @(

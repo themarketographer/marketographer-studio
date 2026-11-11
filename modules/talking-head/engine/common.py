@@ -40,7 +40,12 @@ def encoder_args(calidad="final", q=None):
 
 def hilos_auto():
     # Núcleos de rendimiento de la Mac menos uno para el sistema, máximo 6; HILOS=1 fuerza un solo proceso.
-    return int(os.environ.get("HILOS") or max(min((os.cpu_count() or 2) - 1, 6), 1))
+    if os.environ.get("HILOS"):
+        return int(os.environ["HILOS"])
+    n = os.cpu_count() or 2
+    if sys.platform == "win32":  # los procesadores de Windows cuentan hilos, no núcleos, y cada proceso carga el modelo en memoria: se usa la mitad
+        return max(min(n // 2, 4), 1)
+    return max(min(n - 1, 6), 1)
 
 
 def correr_tramos(proj, accion, tramos, extra, total, avance, destino, simultaneos=None):

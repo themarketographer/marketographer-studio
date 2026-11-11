@@ -10,3 +10,5 @@ Estudio.app/Contents/Resources/*.log
 modules/talking-head/engine/models/
 dist/
 .runtime/
+__pycache__/
+*.pyc
