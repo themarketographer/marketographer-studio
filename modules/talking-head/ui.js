@@ -2998,8 +2998,34 @@ Lo que necesito de ti:
   }
   async function panelLook() {
     const st = estilo(), im = st.imagen;
+    const luts = await api(A + '/luts').catch(() => []);
+    const actual = (S.p && S.p.lut) || '';
+    const poner = async (nombre) => { try { await lanzar('lut', { nombre }); } catch (e) { toast(e.message); } };
+    const subirLut = () => {
+      const i = h('input', { type: 'file', accept: '.cube', hidden: true, onchange: async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const r = await fetch(`/api${A}/luts/subir?nombre=${encodeURIComponent(f.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'No pude subirla');
+          pintarPanel(); toast(`LUT "${j.nombre}" lista. Elígela para aplicarla.`);
+        } catch (er) { toast(er.message); }
+      } });
+      document.body.append(i); i.click(); i.remove();
+    };
+    const cardLut = h('section', { class: 'card' }, h('h2', {}, 'Color de cámara (Log o perfil plano)'),
+      h('p', { class: 'sub' }, 'Si grabaste en Log, Red 709 o perfil plano, aplica la LUT de tu cámara al video de origen. El color cambia en la vista en vivo, en el recorte y en el video final, sin teñir tus textos.'),
+      actual ? h('p', { class: 'hint' }, `Ahora: ${actual}`) : null,
+      h('div', { class: 'musica' },
+        h('button', { type: 'button', class: 'pista pista-n' + (!actual ? ' on' : ''), onclick: () => actual && poner('') }, h('strong', {}, 'Color original')),
+        h('button', { type: 'button', class: 'pista pista-n' + (actual === 'Perfil plano → normal' ? ' on' : ''), onclick: () => poner('@plano') }, h('strong', {}, 'Perfil plano → normal'), h('small', {}, 'Aproximado, sin LUT de cámara')),
+        ...luts.map((n) => h('div', { class: 'pista' + (actual === n ? ' on' : '') },
+          h('button', { type: 'button', class: 'pista-n', onclick: () => poner(n) }, h('strong', {}, n)),
+          h('button', { type: 'button', class: 'btn danger sm', 'aria-label': 'Borrar ' + n, onclick: async () => { if (!confirm('¿Borrar esta LUT?')) return; await api(`${A}/luts/${encodeURIComponent(n)}`, { method: 'DELETE' }); pintarPanel(); } }, 'Borrar')))),
+      h('div', { class: 'row-gap' }, h('button', { type: 'button', class: 'btn ghost', onclick: subirLut, html: icon('plus') + ' Subir una LUT (.cube)' })),
+      h('small', { class: 'hint' }, 'Aplicarla vuelve a codificar tu video (unos segundos por minuto) y obliga a armar de nuevo la vista previa.'));
     return [
       ...(await seccionesLooks()),
+      cardLut,
       h('section', { class: 'card' }, h('h2', {}, 'Contraste y color'),
         slider('Contraste', 0.7, 1.5, 0.05, im.contraste, (v) => `${Math.round(v * 100)}%`, (v) => { im.contraste = v; cambio(); }, DEF.imagen.contraste),
         slider('Saturación', 0, 1.8, 0.05, im.saturacion, (v) => `${Math.round(v * 100)}%`, (v) => { im.saturacion = v; cambio(); }, DEF.imagen.saturacion),

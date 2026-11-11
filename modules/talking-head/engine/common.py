@@ -178,6 +178,42 @@ def asegurar_legible(proj):
     return True
 
 
+def _cube_plano(path, n=33):
+    """LUT incluida para video grabado en perfil plano o Log: sube contraste y color. Es aproximada: una LUT de tu cámara es más exacta."""
+    import numpy as np
+    r = np.linspace(0, 1, n)
+    b, g, rr = np.meshgrid(r, r, r, indexing="ij")  # el .cube hace variar primero el rojo
+    x = np.stack([rr, g, b], -1).reshape(-1, 3)
+    x = np.clip((x - 0.42) * 1.5 + 0.5, 0, 1)
+    gris = x @ np.array([0.2126, 0.7152, 0.0722])
+    x = np.clip(gris[:, None] + (x - gris[:, None]) * 1.3, 0, 1)
+    with open(path, "w") as f:
+        f.write(f"LUT_3D_SIZE {n}\n" + "\n".join(f"{a:.5f} {b_:.5f} {c:.5f}" for a, b_, c in x) + "\n")
+
+
+def aplicar_lut(proj, lut):
+    """Aplica una LUT (.cube) al video de origen, o la quita (lut=None). El original se guarda como source_original.mp4,
+    así la vista en vivo, el recorte y el video final usan el mismo color. Se puede volver al original."""
+    proj = Path(proj)
+    src, orig = proj / "source.mp4", proj / "source_original.mp4"
+    if lut is None:
+        if orig.exists():
+            orig.replace(src)
+    else:
+        if not orig.exists():
+            src.replace(orig)
+        tmp = proj / "_fuente_lut.mp4"
+        shutil.copyfile(lut, proj / "_lut.cube")
+        status(proj, "lut", 10, "Aplicando el color a tu video")
+        subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", orig.name, "-vf", "lut3d=file=_lut.cube", "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+                        "-pix_fmt", "yuv420p", "-fps_mode", "passthrough", "-c:a", "copy", "-movflags", "+faststart", tmp.name], check=True, cwd=proj)
+        tmp.replace(src)
+        (proj / "_lut.cube").unlink(missing_ok=True)
+    for f in ("preview.mp4", "final.mp4"):
+        (proj / f).unlink(missing_ok=True)
+    status(proj, "analizado", 100, "Color aplicado" if lut else "Color original")
+
+
 def probe(video):
     """Devuelve (ancho, alto, fps, duracion) usando OpenCV."""
     import cv2

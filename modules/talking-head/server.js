@@ -27,7 +27,7 @@ export default async function register({ route, config }) {
     const d = path.join(base, id);
     const meta = readJson(d, 'meta.json', {});
     return { ...meta, id, status: readJson(d, 'status.json'), corriendo: jobs.has(id),
-      analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')), tieneAnterior: fs.existsSync(path.join(d, 'alpha_anterior.mp4')) };
+      analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')), tieneAnterior: fs.existsSync(path.join(d, 'alpha_anterior.mp4')), lut: fs.existsSync(path.join(d, 'lut.txt')) ? fs.readFileSync(path.join(d, 'lut.txt'), 'utf8') : '' };
   };
 
   function lanzar(id, args, alTerminar) {
@@ -123,6 +123,25 @@ export default async function register({ route, config }) {
     fs.writeFileSync(path.join(dir(params.id), 'plan.json'), JSON.stringify(body, null, 2));
   });
   route.post('/proyectos/:id/analizar', ({ params }) => { lanzar(params.id, ['analizar']); });
+  // Color de cámara (Log / perfil plano): una LUT .cube se aplica al video de origen. El original queda guardado y se puede volver.
+  const lutsDir = path.join(config.root, 'data', 'luts');
+  fs.mkdirSync(lutsDir, { recursive: true });
+  const nombreLut = (n) => path.basename(String(n || '')).replace(/[^\w .()-]/g, '_').slice(0, 100);
+  route.get('/luts', () => fs.readdirSync(lutsDir).filter((f) => /\.cube$/i.test(f)).sort());
+  route.post('/luts/subir', async ({ query, stream }) => {
+    const nombre = nombreLut(query.nombre);
+    if (!/\.cube$/i.test(nombre)) throw new Error('Sube una LUT en formato .cube.');
+    await pipeline(stream, fs.createWriteStream(path.join(lutsDir, nombre)));
+    return { nombre };
+  });
+  route.delete('/luts/:archivo', ({ params }) => { fs.rmSync(path.join(lutsDir, nombreLut(params.archivo)), { force: true }); });
+  route.post('/proyectos/:id/lut', ({ params, body }) => {
+    const d = dir(params.id), n = body.nombre === '@plano' ? '@plano' : nombreLut(body.nombre);
+    if (n && n !== '@plano' && !fs.existsSync(path.join(lutsDir, n))) throw new Error('Esa LUT no existe.');
+    lanzar(params.id, ['lut', '--salida', n === '@plano' || !n ? n : path.join(lutsDir, n)], (code) => {
+      if (code === 0) { if (n) fs.writeFileSync(path.join(d, 'lut.txt'), n === '@plano' ? 'Perfil plano → normal' : n); else fs.rmSync(path.join(d, 'lut.txt'), { force: true }); }
+    });
+  });
   // Recorte de la persona con más calidad (opcional, tarda más). El anterior se guarda para poder volver.
   route.post('/proyectos/:id/mejorar-recorte', ({ params }) => { dir(params.id); lanzar(params.id, ['recorte-mejor']); });
   route.post('/proyectos/:id/recorte-anterior', ({ params }) => {

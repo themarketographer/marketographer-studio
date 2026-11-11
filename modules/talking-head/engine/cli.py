@@ -11,7 +11,7 @@ from common import status
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn", "matte", "recorte-mejor", "exportar"])
+    ap.add_argument("accion", choices=["analizar", "voz", "plan", "render", "onda", "portada", "luz", "vocab", "candidatos", "miniatura", "srt", "transcripcion", "formato", "pvn", "matte", "recorte-mejor", "lut", "exportar"])
     ap.add_argument("carpeta")
     ap.add_argument("--calidad", default="final", choices=["borrador", "medio", "final"])
     ap.add_argument("--desde", type=float, default=0.0)
@@ -60,6 +60,13 @@ def main():
         elif a.accion == "recorte-mejor":
             import matte
             matte.mejorar(proj)
+        elif a.accion == "lut":
+            import common
+            lut = a.salida or None
+            if lut == "@plano":
+                lut = str(proj / "_plano.cube")
+                common._cube_plano(lut)
+            common.aplicar_lut(proj, lut)
         elif a.accion == "matte":  # uso interno: un tramo del recorte, lanzado por matte.run en paralelo
             import matte
             matte.run(proj, tramo=tuple(int(n) if n else None for n in a.tramo.split(":")), salida=a.salida)
