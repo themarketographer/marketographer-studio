@@ -8,7 +8,8 @@ import sfx
 SR = sfx.SR
 DEFAULT_AUDIO = {
     "mejorar": False, "graves": True, "ruido": 0.5, "compresion": True, "volumen": True,
-    "musica": {"archivo": "", "vol": -18, "duck": 10, "inicio": 0, "fundido": 1.5},
+    "musica": {"archivo": "", "vol": -18, "duck": 10, "inicio": 0, "fundido": 1.5, "hueco": False, "bucle": True},
+    "voz_eq": "ninguna",
 }
 
 
@@ -36,6 +37,8 @@ def mejorar(x, cfg):
         f.append("highpass=f=80")
     if cfg["ruido"] > 0.02:
         f.append(f"afftdn=nr={int(8 + cfg['ruido'] * 24)}:nf=-30")
+    f += {"claridad": ["equalizer=f=250:t=q:w=1:g=-2", "equalizer=f=3500:t=q:w=1:g=3"],
+          "calida": ["equalizer=f=150:t=q:w=1:g=2", "equalizer=f=6000:t=q:w=1:g=-2"]}.get(cfg.get("voz_eq"), [])
     if cfg["compresion"]:
         f.append("acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=2")
     if cfg["volumen"]:
@@ -58,6 +61,25 @@ def _rms(x):
     return float(np.sqrt(np.mean(x ** 2) + 1e-12))
 
 
+def _bucle(mus, n, x):
+    """Repite la pista con un fundido cruzado de x muestras, sin salto en la unión."""
+    x = min(x, len(mus) // 3)
+    if x < 2:
+        return np.tile(mus, (math.ceil(n / max(len(mus), 1)), 1))
+    sube, baja = np.linspace(0, 1, x, dtype=np.float32)[:, None], np.linspace(1, 0, x, dtype=np.float32)[:, None]
+    out = mus
+    while len(out) < n:
+        out = np.vstack([out[:-x], out[-x:] * baja + mus[:x] * sube, mus[x:]])
+    return out
+
+
+def _eq_musica(mus):
+    r = subprocess.run([ffmpeg_exe(), "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "2", "-i", "-", "-af",
+                        "equalizer=f=1200:t=q:w=0.6:g=-4,equalizer=f=300:t=q:w=1:g=-2", "-f", "f32le", "-ar", str(SR), "-ac", "2", "-"],
+                       input=mus.tobytes(), capture_output=True, check=True)
+    return _ajusta(np.frombuffer(r.stdout, np.float32).reshape(-1, 2).copy(), len(mus))
+
+
 def mezclar_musica(voz, cfg, carpeta):
     """Suma la música a la voz. La música baja 'duck' dB mientras hablas y sube en las pausas."""
     m = cfg["musica"]
@@ -71,8 +93,11 @@ def mezclar_musica(voz, cfg, carpeta):
     mus = mus[ini:] if ini < len(mus) else mus
     n = len(voz)
     if len(mus) < n:
-        mus = np.tile(mus, (math.ceil(n / max(len(mus), 1)), 1))
+        mus = _bucle(mus, n, int(SR * 1.5)) if m.get("bucle", True) else np.vstack([mus, np.zeros((n - len(mus), 2), np.float32)])
     mus = mus[:n].copy()
+    if m.get("hueco") and len(mus):
+        # Le hace sitio a la voz: baja la zona donde se escucha el habla (200 Hz a 4 kHz).
+        mus = _eq_musica(mus)
     # El volumen se mide contra tu voz: 0 dB deja la música igual de fuerte que la voz.
     win = int(SR * 0.05)
     k = n // win

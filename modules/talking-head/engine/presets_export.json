@@ -1,5 +1,8 @@
 { "presets": [
   { "id": "redes",    "n": "Redes (TikTok, Reels, Shorts)", "uso": "Lo que más usas. Sonido parejo a −14 LUFS.", "codec": "h264", "corto": 1080, "mbps": 12, "lufs": -14, "ext": "mp4" },
+    { "id": "tiktok",  "n": "TikTok", "uso": "1080 a 30 cuadros, 10 Mbps, sonido −14 LUFS.", "codec": "h264", "corto": 1080, "fps": 30, "mbps": 10, "lufs": -14, "ext": "mp4" },
+  { "id": "reels",    "n": "Instagram Reels", "uso": "1080 a 30 cuadros, 8 Mbps: lo que Instagram recomprime menos.", "codec": "h264", "corto": 1080, "fps": 30, "mbps": 8, "lufs": -14, "ext": "mp4" },
+  { "id": "shorts",   "n": "YouTube Shorts", "uso": "1080 a 60 cuadros, 16 Mbps, sonido −14 LUFS.", "codec": "h264", "corto": 1080, "fps": 60, "mbps": 16, "lufs": -14, "ext": "mp4" },
   { "id": "youtube",  "n": "YouTube", "uso": "Alta calidad para YouTube y web.", "codec": "h264", "corto": 1080, "mbps": 16, "lufs": -14, "ext": "mp4" },
   { "id": "liviano",  "n": "Liviano (WhatsApp)", "uso": "Pesa poco, para mandar por chat.", "codec": "h264", "corto": 720, "mbps": 4, "lufs": -14, "ext": "mp4" },
   { "id": "hevc",     "n": "HEVC (más chico)", "uso": "Misma calidad, archivo más pequeño. iPhone y Mac.", "codec": "hevc", "corto": 1080, "mbps": 8, "lufs": null, "ext": "mp4" },

@@ -850,3 +850,6 @@ input[type=range] { min-height: 32px; cursor: pointer; }
 /* mientras arrastras en la línea de tiempo el cursor se queda fijo, sin importar sobre qué elemento pase */
 body.cursor-ew, body.cursor-ew * { cursor: ew-resize !important; }
 body.cursor-col, body.cursor-col * { cursor: col-resize !important; }
+
+.pz-wrap { display: flex; flex-direction: column; gap: 4px; }
+.pz-wrap .btn { align-self: flex-start; }

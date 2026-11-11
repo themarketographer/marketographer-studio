@@ -1,6 +1,7 @@
 // Panel "Exportar": un solo botón. Arma el video final si hace falta y después saca cada formato elegido (una pasada de ffmpeg cada uno).
 const CAL = [[16, 'Alta'], [10, 'Media'], [4, 'Liviana']];
 const FPS = [[0, 'Igual'], [24, '24'], [30, '30'], [60, '60']];
+const RES = [[720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K']];
 const FORM = [['h264', 'MP4 H.264'], ['hevc', 'MP4 HEVC'], ['prores', 'MOV ProRes']];
 
 export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, guardarYa, tiempoRestante, verUltimo, repintar, pausarVista }) {
@@ -13,7 +14,8 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
   aj.exportCustom = aj.exportCustom || { corto: 1080, fps: 0, codec: 'h264', mbps: 10, lufs: true };
   const C = aj.exportCustom;
   const guardar = () => guardarAjustes(aj);
-  const hecho = () => aj.exportSel.length + (aj.exportCustomOn ? 1 : 0);
+  const guardados = () => (aj.exportGuardados = aj.exportGuardados || []);
+  const hecho = () => aj.exportSel.length + (aj.exportCustomOn ? 1 : 0) + guardados().filter((x) => (aj.exportGuardadosSel || []).includes(x.id)).length;
   const necesitaFinal = () => !S.p.tieneFinal || S.dirty;
 
   const barra = h('i', { style: 'width:0%' });
@@ -42,6 +44,7 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
   async function exportar() {
     const tareas = aj.exportSel.map((p) => ({ preset: p }));
     if (aj.exportCustomOn) tareas.push({ preset: 'custom', custom: { codec: C.codec, corto: C.corto, fps: C.fps || null, mbps: C.mbps, lufs: C.lufs ? -14 : null, n: 'Personalizado' } });
+    for (const g of guardados().filter((x) => (aj.exportGuardadosSel || []).includes(x.id))) tareas.push({ preset: 'custom', custom: { codec: g.codec, corto: g.corto, fps: g.fps || null, mbps: g.mbps, lufs: g.lufs ? -14 : null, n: g.n } });
     if (!tareas.length) { toast('Marca al menos un formato.'); return; }
     btn.disabled = true; progreso.hidden = false; barra.style.width = '0%';
     if (pausarVista) pausarVista(); // reproducir mientras se exporta le quita GPU a la exportación
@@ -55,7 +58,7 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
         S.p.tieneFinal = d.tieneFinal; S.dirty = false;
       }
       for (const [i, t] of tareas.entries()) {
-        const nombre = t.preset === 'custom' ? 'Personalizado' : (presets.find((p) => p.id === t.preset) || {}).n || t.preset;
+        const nombre = t.preset === 'custom' ? (t.custom.n || 'Personalizado') : (presets.find((p) => p.id === t.preset) || {}).n || t.preset;
         estado.textContent = `Exportando ${nombre}…`;
         await api(`${A}/proyectos/${id}/exportar`, { method: 'POST', body: t });
         await esperar(tareas.length > 1 ? `${i + 1} de ${tareas.length}: ${nombre}` : nombre);
@@ -71,11 +74,24 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
   const personalizado = h('details', { open: !!aj.exportCustomOn },
     h('summary', {}, 'Ajuste personalizado'),
     interruptor('Incluir este ajuste', aj.exportCustomOn, (v) => { aj.exportCustomOn = v; guardar(); repintar(); }),
-    seg('Resolución', [[720, '720p'], [1080, '1080p']], C.corto, (v) => { C.corto = Number(v); guardar(); repintar(); }),
+    seg('Resolución', RES, C.corto, (v) => { C.corto = Number(v); guardar(); repintar(); }),
     seg('Cuadros por segundo', FPS, C.fps, (v) => { C.fps = Number(v); guardar(); repintar(); }),
     seg('Formato', FORM, C.codec, (v) => { C.codec = v; guardar(); repintar(); }),
     seg('Calidad', CAL, C.mbps, (v) => { C.mbps = Number(v); guardar(); repintar(); }),
-    interruptor('Sonido parejo para redes (−14 LUFS)', C.lufs, (v) => { C.lufs = v; guardar(); repintar(); }));
+    interruptor('Sonido parejo para redes (−14 LUFS)', C.lufs, (v) => { C.lufs = v; guardar(); repintar(); }),
+    h('button', { type: 'button', class: 'btn ghost sm', onclick: () => {
+      const n = (prompt('¿Cómo quieres llamar a este ajuste?') || '').trim().slice(0, 40);
+      if (!n) return;
+      guardados().push({ id: 'g' + Date.now().toString(36), n, codec: C.codec, corto: C.corto, fps: C.fps, mbps: C.mbps, lufs: C.lufs });
+      aj.exportGuardadosSel = [...(aj.exportGuardadosSel || []), guardados().at(-1).id]; guardar(); repintar();
+    } }, 'Guardar este ajuste con un nombre'));
+  const mis = guardados().length ? h('div', { class: 'ctl' }, h('h3', {}, 'Mis ajustes'), h('div', { class: 'pz-grid' }, guardados().map((g) => {
+    const on = (aj.exportGuardadosSel || []).includes(g.id);
+    return h('div', { class: 'pz-wrap' },
+      h('button', { type: 'button', class: 'pz' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: () => { aj.exportGuardadosSel = on ? aj.exportGuardadosSel.filter((x) => x !== g.id) : [...(aj.exportGuardadosSel || []), g.id]; guardar(); repintar(); } },
+        h('strong', {}, g.n), h('small', {}, `${g.corto}p · ${g.fps || 'igual'} fps · ${g.codec === 'prores' ? 'ProRes' : g.mbps + ' Mbps'}`)),
+      h('button', { type: 'button', class: 'btn danger sm', 'aria-label': 'Borrar ' + g.n, onclick: () => { aj.exportGuardados = guardados().filter((x) => x.id !== g.id); guardar(); repintar(); } }, 'Borrar'));
+  }))) : null;
 
   const filas = lista.map((f) => {
     const vol = f.lufs != null ? ` · ${String(f.lufs).replace('.', ',')} LUFS` : '';
@@ -85,6 +101,7 @@ export async function hojaExportar({ h, api, A, S, toast, seg, guardarAjustes, g
 
   return [
     h('div', { class: 'pz-grid' }, presets.map(tarjeta)),
+    mis,
     personalizado,
     h('div', { class: 'exp-accion' }, btn,
       h('small', { class: 'hint' }, necesitaFinal() ? 'Primero se arma el video final con tus cambios (tarda un poco) y luego sale cada formato.' : 'El video final ya está listo: solo falta sacar los formatos.')),

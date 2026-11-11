@@ -204,7 +204,8 @@ def preset(proj, pid, custom=None):
     nombre = re.sub(r"[^\w-]+", "-", load(proj, "meta.json", {}).get("nombre", proj.name)).strip("-") or "video"
     carpeta = proj / "export"
     carpeta.mkdir(exist_ok=True)
-    out = carpeta / f"{nombre}-{pid}.{cfg['ext']}"
+    etiqueta = re.sub(r"[^\w-]+", "-", str(cfg.get("n", ""))).strip("-")[:30] if pid == "custom" else ""
+    out = carpeta / f"{nombre}-{pid}{'-' + etiqueta if etiqueta else ''}.{cfg['ext']}"
     status(proj, "formato", 20, f"Exportando {cfg.get('n', pid)}")
     subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(src), *args, str(out)], check=True)
     med = {}

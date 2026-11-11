@@ -51,6 +51,13 @@ export default async function register({ route, config }) {
     motorListo: !!pythonPath(),
     fuentes: fs.readdirSync(path.join(engine, 'fonts')).filter((f) => /\.(ttf|otf)$/i.test(f)).sort(),
   }));
+  // Tipografías propias: se guardan junto a las incluidas y aparecen en todos los selectores.
+  route.post('/fuentes/subir', async ({ query, stream }) => {
+    const nombre = path.basename(String(query.nombre || '')).replace(/[^\w .()-]/g, '_').slice(0, 100);
+    if (!/\.(ttf|otf)$/i.test(nombre)) throw new Error('Sube una tipografía en formato ttf u otf.');
+    await pipeline(stream, fs.createWriteStream(path.join(engine, 'fonts', nombre)));
+    return { nombre };
+  });
   route.get('/fuentes/:archivo', ({ params }) => {
     const f = path.join(engine, 'fonts', path.basename(params.archivo));
     return { __file: f, type: 'font/ttf' };

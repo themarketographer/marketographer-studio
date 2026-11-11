@@ -69,7 +69,7 @@ const CLAVES_T = new Set('marketing ventas vender venderse negocio negocios clie
 const VERBAL_T = ['aba', 'aron', 'ieron', 'ando', 'iendo', 'ara', 'ase', 'emos', 'amos', 'ian', 'ia', 'an', 'en', 'ar', 'er', 'ir'];
 const DENS_MIN = { 1: 8, 2: 5, 3: 4 };
 const PARASITAS = new Set('para como pero esto esta este estos estas todo todos toda todas porque cuando donde sobre entre desde hasta tambien tiene tienen tengo hacer hace haces hacen puede puedes pueden quiero quieres quien cual cuales algo mucho mucha muchos muchas cada otro otra otros otras solo ahora aqui asi bien entonces mismo misma muy tus sus nuestro vuestro siempre nunca ellos ellas nosotros usted ustedes vamos eres somos estoy estas estan fue ser ver dijiste digo dice dicen hola chicos hoy'.split(' '));
-const AUDIO_DEF = { mejorar: false, graves: true, ruido: 0.5, compresion: true, volumen: true, musica: { archivo: '', vol: -18, duck: 10, inicio: 0, fundido: 1.5 } };
+const AUDIO_DEF = { mejorar: false, graves: true, ruido: 0.5, compresion: true, volumen: true, musica: { archivo: '', vol: -18, duck: 10, inicio: 0, fundido: 1.5, hueco: false, bucle: true }, voz_eq: 'ninguna' };
 const CORTES_DEF = { on: false, modo: '', umbral: -38, minFrames: 10, pre: 3, post: 3, aireAntes: 0.06, aireDespues: 0.08, aireFin: 0.08, minCorte: 0.12, fundido: 12, zoomAlterna: false, ignorar: [], manual: [], rangos: [], borradas: [], sugIgnoradas: [] };
 const PRESETS_PAUSA = [
   ['natural', 'Natural', 'Deja respirar entre ideas', { aireAntes: 0.10, aireDespues: 0.16, aireFin: 0.12, minCorte: 0.15 }],
@@ -401,7 +401,19 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     h('div', { class: 'fonts', role: 'radiogroup', 'aria-label': label }, [
       permitirIgual ? h('button', { type: 'button', role: 'radio', 'aria-checked': String(!cur), class: 'font' + (!cur ? ' on' : ''), onclick: () => on('') }, h('span', { class: 'aa small' }, 'Igual'), h('small', {}, 'sin cambio')) : null,
       ...S.fuentes.map((f) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(cur === f), class: 'font' + (cur === f ? ' on' : ''), style: `font-family:${fam(f)}`, onclick: () => on(f) },
-        h('span', { class: 'aa' }, 'Aa'), h('small', {}, nombreFuente(f))))]));
+        h('span', { class: 'aa' }, 'Aa'), h('small', {}, nombreFuente(f)))),
+      h('button', { type: 'button', class: 'font', title: 'Subir una tipografía tuya (ttf u otf)', onclick: subirFuente }, h('span', { class: 'aa' }, '+'), h('small', {}, 'Subir mía'))]));
+  function subirFuente() {
+    const i = h('input', { type: 'file', accept: '.ttf,.otf', hidden: true, onchange: async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        const r = await fetch(`/api${A}/fuentes/subir?nombre=${encodeURIComponent(f.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || 'No pude subirla');
+        await cargarFuentes(); toast(`Tipografía "${nombreFuente(j.nombre)}" lista. Ya aparece en todas las letras.`); pintarPanel();
+      } catch (er) { toast(er.message); }
+    } });
+    document.body.append(i); i.click(); i.remove();
+  }
   const colorRow = (label, val, presets, on) => {
     const inp = h('input', { type: 'color', value: val, 'aria-label': label, oninput: (e) => { on(e.target.value, false); } });
     return h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, label), h('div', { class: 'swatches' }, presets.map((c) =>
@@ -1333,7 +1345,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     fondo: () => copiaDe(estilo(), DEF, ['desenfoque', 'motionBlur', 'motionBlurSobre', 'motionBlurModo', 'fondoModo']),
     look: () => { estilo().imagen = structuredClone(DEF.imagen); },
     pelicula: () => { const st = estilo(); st.pelicula = { ...structuredClone(DEF.pelicula), on: st.pelicula.on }; },
-    audio: () => { const a = plan().audio; copiaDe(a, AUDIO_DEF, ['graves', 'ruido', 'compresion', 'volumen']); Object.assign(a.musica, { vol: AUDIO_DEF.musica.vol, duck: AUDIO_DEF.musica.duck, inicio: AUDIO_DEF.musica.inicio, fundido: AUDIO_DEF.musica.fundido }); },
+    audio: () => { const a = plan().audio; copiaDe(a, AUDIO_DEF, ['graves', 'ruido', 'compresion', 'volumen', 'voz_eq']); Object.assign(a.musica, { vol: AUDIO_DEF.musica.vol, duck: AUDIO_DEF.musica.duck, inicio: AUDIO_DEF.musica.inicio, fundido: AUDIO_DEF.musica.fundido, hueco: false, bucle: true }); },
     sonidos: () => { const st = estilo(); st.sfxVol = 1; st.sfxZoom = 'none'; st.sfxCierre = 'ding'; ponerSfxTitulos('auto'); },
   };
 
@@ -1515,12 +1527,14 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     };
     return [
       h('section', { class: 'card' }, h('h2', {}, 'Mejorar mi voz'),
+        h('button', { type: 'button', class: 'btn gold', onclick: () => { Object.assign(a, { mejorar: true, graves: true, ruido: 0.4, compresion: true, volumen: true, voz_eq: 'claridad' }); m.hueco = true; refrescar(); toast('Listo: voz limpia, pareja y con la música a un lado.'); } }, 'Mejorar todo el audio de un clic'),
         toggle('Mejorar el audio al generar el video', a.mejorar, (v) => { a.mejorar = v; refrescar(); }, 'Limpia tu voz y deja el volumen parejo. Se oye al instante en la vista En vivo (aproximado); la mezcla exacta sale en el video generado.'),
         ...(a.mejorar ? [
           toggle('Quitar graves molestos (golpes y ruido de mesa)', a.graves, (v) => { a.graves = v; refrescar(); }),
           slider('Reducción de ruido de fondo', 0, 1, 0.05, a.ruido, (v) => (v < 0.03 ? 'Apagada' : `${Math.round(v * 100)}%`), (v) => { a.ruido = v; cambio(); }, AUDIO_DEF.ruido),
           toggle('Compresión suave (voz más pareja)', a.compresion, (v) => { a.compresion = v; refrescar(); }),
           toggle('Volumen parejo en todo el video', a.volumen, (v) => { a.volumen = v; refrescar(); }),
+          seg('Tono de la voz', [['ninguna', 'Natural'], ['claridad', 'Más clara'], ['calida', 'Más cálida']], a.voz_eq || 'ninguna', (v) => { a.voz_eq = v; refrescar(); }),
         ] : [])),
       h('section', { class: 'card' }, h('h2', {}, 'Música de fondo'),
         h('p', { class: 'sub' }, 'Sube pistas con licencia para redes. La música baja sola cuando hablas y sube en las pausas.'),
@@ -1541,6 +1555,8 @@ export async function mount(root, { api: api0, toast, h, icon }) {
           slider('Volumen respecto a tu voz', -30, 0, 1, m.vol, (v) => `${v} dB`, (v) => { m.vol = v; cambio(); }, AUDIO_DEF.musica.vol),
           slider('Cuánto baja cuando hablas', 0, 24, 1, m.duck, (v) => `${v} dB`, (v) => { m.duck = v; cambio(); }, AUDIO_DEF.musica.duck),
           slider('Empezar la pista en el segundo', 0, 120, 1, m.inicio, (v) => `${v} s`, (v) => { m.inicio = v; cambio(); }, AUDIO_DEF.musica.inicio),
+          toggle('Hacerle sitio a la voz (la música suena menos en el rango del habla)', m.hueco, (v) => { m.hueco = v; refrescar(); }),
+          toggle('Si la música dura menos que el video, repetirla con fundido', m.bucle !== false, (v) => { m.bucle = v; refrescar(); }, 'Apagado, la música termina y el resto queda en silencio.'),
           slider('Fundido al empezar y al terminar', 0, 5, 0.5, m.fundido, (v) => `${v} s`, (v) => { m.fundido = v; cambio(); }, AUDIO_DEF.musica.fundido),
         ] : [])),
     ];
