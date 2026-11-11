@@ -20,9 +20,22 @@ jobs:
           $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -notmatch 'nodejs' }) -join ';'
           if (Get-Command node -ErrorAction SilentlyContinue) { throw 'Node sigue en el PATH' }
           irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/instalar.ps1" | iex
+      - name: Video con voz para medir tiempos (voz sintética de Windows)
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $wav = "${{ runner.temp }}\voz.wav"
+          $s.SetOutputToWaveFile($wav)
+          $t = 'Hola, bueno, hoy vamos a hablar de marketing para fotografos. Si tu quieres vender mas tienes que mostrar tu trabajo. Entonces, empezamos con lo basico: un buen retrato, una buena historia y un precio claro. '
+          $s.Speak($t * 4); $s.Dispose()
+          $ff = (Get-ChildItem "${{ runner.temp }}\estudio\.venv\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-*.exe" | Select-Object -First 1).FullName
+          & $ff -v error -y -f lavfi -i "testsrc2=size=540x960:rate=30" -i $wav -shortest -pix_fmt yuv420p -c:v libx264 -c:a aac "${{ runner.temp }}\voz.mp4"
+          (& $ff -hide_banner -i "${{ runner.temp }}\voz.mp4" 2>&1 | Select-String Duration)
       - name: Probar el motor (subir, analizar, generar)
         shell: powershell
         env:
+          ESTUDIO_VIDEO_PRUEBA: ${{ runner.temp }}\voz.mp4
           ESTUDIO_DIR: ${{ runner.temp }}\estudio
           STUDIO_PY: ${{ runner.temp }}\estudio\.venv\Scripts\python.exe
         run: |

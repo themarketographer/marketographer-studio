@@ -24,7 +24,10 @@ tmp.mkdir(parents=True, exist_ok=True)
 video = tmp / "prueba.mp4"
 ff = common.ffmpeg_exe()
 print("ffmpeg:", ff)
-subprocess.run([ff, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=540x960:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=300:duration=4",
+video_voz = os.environ.get("ESTUDIO_VIDEO_PRUEBA")  # un video con voz real o sintética, para medir tiempos
+if video_voz:
+    video = Path(video_voz)
+else: subprocess.run([ff, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=540x960:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=300:duration=4",
                 "-pix_fmt", "yuv420p", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(video)], check=True)
 print("codificador elegido:", common.encoder_args("borrador"))
 
@@ -44,25 +47,33 @@ try:
     if not pid: falla(f"subida sin id: {nuevo}")
     print("proyecto:", pid)
     api(f"/talking-head/proyectos/{pid}/analizar", "POST", b"{}")
-    fin = time.time() + 600
+    t_an = time.time()
+    fin = time.time() + 1500
     while time.time() < fin:
         e = api(f"/talking-head/proyectos/{pid}/estado")
         if not e.get("corriendo"): break
         time.sleep(2)
     else: falla("el análisis no terminó en 10 minutos")
     st = e.get("status") or {}
-    print("estado final:", st)
+    print(f"análisis: {time.time() - t_an:.0f} s", "estado final:", st)
     if st.get("error"): falla(f"el análisis dio error: {st['error']}")
     if not e.get("analizado"): falla("no se generó plan.json")
+    t_e = time.time()
+    envo = api(f"/talking-head/proyectos/{pid}/envolvente")  # lo que lee la herramienta de cortes
+    print(f"envolvente: {time.time() - t_e:.1f} s, {len(envo.get('db', []))} muestras")
+    if not envo.get("db"): falla("la envolvente salió vacía")
+    pl = api(f"/talking-head/proyectos/{pid}")
+    print("palabras:", len((pl.get("palabras") or [])))
+    t_r = time.time()
     api(f"/talking-head/proyectos/{pid}/renderizar", "POST", json.dumps({"calidad": "borrador"}).encode())
-    fin = time.time() + 600
+    fin = time.time() + 1500
     while time.time() < fin:
         e = api(f"/talking-head/proyectos/{pid}/estado")
         if not e.get("corriendo"): break
         time.sleep(2)
     else: falla("la vista previa no terminó en 10 minutos")
     st = e.get("status") or {}
-    print("estado final render:", st)
+    print(f"vista previa: {time.time() - t_r:.0f} s", "estado final render:", st)
     if st.get("error") or not e.get("tienePreview"): falla(f"no se generó la vista previa: {st}")
     print("TODO BIEN")
 finally:
