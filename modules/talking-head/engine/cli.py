@@ -45,6 +45,8 @@ def main():
                 import voz
                 voz.run(proj, a.audio, a.fondo, a.c1, a.c2, a.imagen)
             import transcribe, matte, plan
+            import common
+            common.asegurar_legible(proj)
             if not (proj / "words.json").exists():
                 transcribe.run(proj, a.modelo)
             if not (proj / "alpha.mp4").exists():

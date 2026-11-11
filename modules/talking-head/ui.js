@@ -623,6 +623,9 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   }
   function prepararPlan(p) {
     if (!p.plan) return;
+    // Si el plan no trae la duración (o viene vacía), se saca de la transcripción: sin ese número fallan las herramientas de corte.
+    if (!(Number(p.plan.duration) > 0)) { const pal = p.palabras || []; p.plan.duration = +(Number(p.duracionVoz) || (pal.length ? pal[pal.length - 1].end : 0) || 1).toFixed(2); }
+    if (!(Number(p.plan.fps) > 0)) p.plan.fps = 30;
     p.plan.style = fusionar(DEF, p.plan.style);
     p.plan.cortes = fusionar(CORTES_DEF, p.plan.cortes);
     p.plan.audio = fusionar(AUDIO_DEF, p.plan.audio);

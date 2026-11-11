@@ -108,7 +108,8 @@ export default async function register({ route, config }) {
 
   route.get('/proyectos/:id', ({ params }) => {
     const d = dir(params.id);
-    return { ...resumen(params.id), plan: readJson(d, 'plan.json'), palabras: readJson(d, 'words.json')?.words || [] };
+    const w = readJson(d, 'words.json');
+    return { ...resumen(params.id), plan: readJson(d, 'plan.json'), palabras: w?.words || [], duracionVoz: w?.duration || 0 };
   });
   route.get('/proyectos/:id/estado', ({ params }) => { dir(params.id); return resumen(params.id); });
   route.put('/proyectos/:id/plan', ({ params, body }) => {

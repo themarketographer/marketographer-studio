@@ -160,6 +160,24 @@ def list_fonts():
     return sorted(p.name for p in FONTS.glob("*.ttf")) + sorted(p.name for p in FONTS.glob("*.otf"))
 
 
+def asegurar_legible(proj):
+    """Si OpenCV no puede leer el video (pasa con algunos de teléfono o de WhatsApp en Windows: H.265, cuadros variables),
+    se convierte una vez a un H.264 normal. Sin esto todo lo demás (recorte, vista previa, exportación) falla o da duración cero."""
+    import cv2
+    src = Path(proj) / "source.mp4"
+    cap = cv2.VideoCapture(str(src))
+    bien = cap.isOpened() and cap.get(cv2.CAP_PROP_FRAME_COUNT) > 0 and cap.read()[0]
+    cap.release()
+    if bien and os.environ.get("ESTUDIO_FORZAR_CONVERSION") != "1":
+        return False
+    status(proj, "preparar", 3, "Convirtiendo el video a un formato que se pueda editar")
+    tmp = Path(proj) / "_fuente.mp4"
+    subprocess.run([ffmpeg_exe(), "-v", "error", "-y", "-i", str(src), "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                    "-fps_mode", "cfr", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)], check=True)
+    tmp.replace(src)
+    return True
+
+
 def probe(video):
     """Devuelve (ancho, alto, fps, duracion) usando OpenCV."""
     import cv2
@@ -168,7 +186,14 @@ def probe(video):
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     n = cap.get(cv2.CAP_PROP_FRAME_COUNT)
     cap.release()
-    return w, h, fps, n / fps
+    dur = n / fps if n and n > 0 and fps else 0.0
+    if not dur or dur != dur:  # algunos videos (WhatsApp, teléfonos) no traen el conteo de cuadros: la duración se lee con ffmpeg
+        import re
+        r = subprocess.run([ffmpeg_exe(), "-hide_banner", "-i", str(video)], capture_output=True, text=True, errors="ignore")
+        m = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr or "")
+        if m:
+            dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    return w, h, fps, dur
 
 
 # ---------------------------------------------------------------- formatos de salida
