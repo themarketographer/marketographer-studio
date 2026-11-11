@@ -47,6 +47,7 @@ Abre Claude Code (o Claude Cowork con acceso a tu computador) y pégale esto:
 | Windows: el comando dice que la ejecución de scripts está deshabilitada | Usar la versión con `powershell -NoProfile -ExecutionPolicy Bypass -Command "…"` del paso 3. |
 | Windows: falla una librería o falta una DLL ("Visual C++") | Instalar el "Microsoft Visual C++ Redistributable" (x64) desde microsoft.com y volver a ejecutar el comando. |
 | Windows: el antivirus detiene la instalación | Permitir la carpeta `EstudioMarketographer` y volver a ejecutar el comando. |
+| Windows: va lento o una función no carga | Ejecutar `irm https://raw.githubusercontent.com/themarketographer/marketographer-studio/main/diagnostico.ps1 \| iex` y mandar el archivo `diagnostico-estudio.txt` del escritorio. |
 | La app abre pero Talking Head dice "Falta instalar el motor" | Volver a ejecutar el comando de instalación del paso 3. |
 | Puerto 4177 ocupado | Cerrar la otra ventana del Estudio y abrirlo de nuevo. |
 

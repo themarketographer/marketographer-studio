@@ -59,7 +59,7 @@ def run(proj, model_size="small", language="es"):
             print(f"[transcribir] GPU no disponible ({type(e).__name__}: {e}); sigo en el procesador", flush=True)
     from faster_whisper import WhisperModel
     status(proj, "transcribir", 8, "Cargando Whisper (la primera vez descarga el modelo)")
-    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
+    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=max((os.cpu_count() or 4) // (2 if os.name == "nt" else 1), 1))  # en Windows, hilos son el doble que núcleos
     segments, info = model.transcribe(audio, language=language, word_timestamps=True, vad_filter=True,
                                        beam_size=5 if precisa else 1, condition_on_previous_text=False,
                                        initial_prompt=prompt_whisper())

@@ -64,6 +64,15 @@ jobs:
           $a = (New-Object -ComObject WScript.Shell).CreateShortcut($d)
           Write-Host "Destino: $($a.TargetPath) $($a.Arguments)  Icono: $($a.IconLocation)"
           if (-not (Test-Path "$env:ESTUDIO_DIR\web\logo.ico")) { throw 'Falta el icono' }
+      - name: Probar el diagnóstico de Windows
+        shell: powershell
+        env:
+          ESTUDIO_DIR: ${{ runner.temp }}\estudio
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File diagnostico.ps1
+          $f = Join-Path ([Environment]::GetFolderPath('Desktop')) 'diagnostico-estudio.txt'
+          if (-not (Test-Path $f)) { throw 'El diagnostico no creo su archivo' }
+          Get-Content $f -TotalCount 25
       - name: Registro del servidor si algo falló
         if: failure()
         shell: powershell

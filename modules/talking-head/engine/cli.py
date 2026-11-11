@@ -50,6 +50,8 @@ def main():
             if not (proj / "alpha.mp4").exists():
                 matte.run(proj)
             plan.run(proj)
+            import cuts
+            cuts.envolvente(proj)  # lista desde el principio: la herramienta de cortes no tiene que esperar a otro proceso
             import render
             render.ensure_proxy(proj)
             status(proj, "analizado", 100, "Listo para editar")
