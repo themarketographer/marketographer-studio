@@ -31,7 +31,7 @@ jobs:
           $s.Speak($t * 4); $s.Dispose()
           $ff = (Get-ChildItem "${{ runner.temp }}\estudio\.venv\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-*.exe" | Select-Object -First 1).FullName
           & $ff -v error -y -f lavfi -i "testsrc2=size=540x960:rate=30" -i $wav -shortest -pix_fmt yuv420p -c:v libx264 -c:a aac "${{ runner.temp }}\voz.mp4"
-          (& $ff -hide_banner -i "${{ runner.temp }}\voz.mp4" 2>&1 | Select-String Duration)
+          Get-Item "${{ runner.temp }}\voz.mp4" | Select-Object Length
       - name: Probar el motor (subir, analizar, generar)
         shell: powershell
         env:
