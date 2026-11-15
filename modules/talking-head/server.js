@@ -23,10 +23,17 @@ export default async function register({ route, config }) {
     return d;
   };
   const readJson = (d, name, fb = null) => { try { return JSON.parse(fs.readFileSync(path.join(d, name), 'utf8')); } catch { return fb; } };
+  // Espacio que ocupa el proyecto en disco (sus archivos y los de export/), para saber cuáles conviene borrar.
+  const peso = (d) => {
+    let total = 0;
+    const sumar = (carpeta) => { try { for (const f of fs.readdirSync(carpeta, { withFileTypes: true })) if (f.isFile()) total += fs.statSync(path.join(carpeta, f.name)).size; } catch { /* carpeta ausente */ } };
+    sumar(d); sumar(path.join(d, 'export'));
+    return total;
+  };
   const resumen = (id) => {
     const d = path.join(base, id);
     const meta = readJson(d, 'meta.json', {});
-    return { ...meta, id, status: readJson(d, 'status.json'), corriendo: jobs.has(id),
+    return { ...meta, id, peso: peso(d), status: readJson(d, 'status.json'), corriendo: jobs.has(id),
       analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')), tieneAnterior: fs.existsSync(path.join(d, 'alpha_anterior.mp4')), lut: fs.existsSync(path.join(d, 'lut.txt')) ? fs.readFileSync(path.join(d, 'lut.txt'), 'utf8') : '' };
   };
 

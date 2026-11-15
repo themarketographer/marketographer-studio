@@ -199,6 +199,8 @@ const ICN_F = {  // relleno suave detrás de la forma
   pelicula: 'M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z', mic: 'M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3z', sol: 'M12 8a4 4 0 100 8 4 4 0 000-8z', reloj: 'M12 4a8 8 0 100 16 8 8 0 000-16z',
   gota: 'M12 3s6 6 6 10a6 6 0 01-12 0c0-4 6-10 6-10z', llama: 'M12 3c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z', camara: 'M12 10a2 2 0 100 4 2 2 0 000-4z',
 };
+// Tamaño en disco en palabras: 850 MB, 1,2 GB.
+const gb = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB');
 const ic = (n, sz = 18) => (ICN[n] ? `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICN_F[n] ? `<path d="${ICN_F[n]}" fill="currentColor" fill-opacity=".16" stroke="none"/>` : ''}<path d="${ICN[n]}"/></svg>` : '');
 // Cada etiqueta recibe el ícono que mejor dice qué está modificando.
 const ICONO_DE = [
@@ -440,11 +442,11 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       ...[!S.motorListo ? h('div', { class: 'callout warn' }, h('strong', {}, 'Falta instalar el motor. '), 'Cierra el Estudio y vuélvelo a abrir: se prepara solo (necesita internet). Si no pasa nada, pídele a tu Claude que ejecute preparar.sh en la carpeta EstudioMarketographer.') : null].filter(Boolean),
       zona,
       h('div', { class: 'voz-cta' }, h('span', {}, 'No sales en cámara?'), h('button', { type: 'button', class: 'btn ghost', onclick: pantallaVoz, html: ic('mic', 16) + ' Crear un video con solo tu voz' })),
-      S.proyectos.length ? h('div', {}, h('h2', { class: 'sec' }, 'Tus proyectos'),
+      S.proyectos.length ? h('div', {}, h('h2', { class: 'sec' }, 'Tus proyectos'), h('p', { class: 'muted psum' }, `Ocupan ${gb(S.proyectos.reduce((t, p) => t + (p.peso || 0), 0))} en tu disco. Para liberar espacio, abre un proyecto que ya publicaste y bórralo.`),
         h('ul', { class: 'plist grid' }, S.proyectos.slice().sort((a, b) => String(b.creado || '').localeCompare(String(a.creado || ''))).map((p) => h('li', { class: 'pcard' },
           h('button', { class: 'pitem', onclick: () => abrir(p.id) },
             h('span', { class: 'pthumb' }, h('img', { src: `/api${A}/proyectos/${p.id}/miniatura`, alt: '', loading: 'lazy', onerror: (e) => e.target.remove() }), h('i', { html: ic('video', 22) })),
-            h('span', { class: 'ptx' }, h('strong', {}, p.nombre), h('small', {}, `${p.tieneFinal ? 'Con video final' : p.analizado ? 'Analizado' : p.corriendo ? 'Procesando' : 'Sin analizar'}${p.creado ? ' · ' + new Date(p.creado).toLocaleDateString('es', { day: 'numeric', month: 'short' }) : ''}`))),
+            h('span', { class: 'ptx' }, h('strong', {}, p.nombre), h('small', {}, `${p.tieneFinal ? 'Con video final' : p.analizado ? 'Analizado' : p.corriendo ? 'Procesando' : 'Sin analizar'}${p.creado ? ' · ' + new Date(p.creado).toLocaleDateString('es', { day: 'numeric', month: 'short' }) : ''}${p.peso ? ' · ' + gb(p.peso) : ''}`))),
           h('button', { class: 'ib pdup', title: 'Duplicar para probar otra versión', 'aria-label': `Duplicar ${p.nombre}`, onclick: async (e) => { e.stopPropagation(); await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); inicio(); }, html: ic('copiar', 16) }))))) : ''); 
   }
 
