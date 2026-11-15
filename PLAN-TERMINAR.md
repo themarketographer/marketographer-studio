@@ -23,7 +23,7 @@ Cada tarea termina con: `node --check` en los `.js` tocados, los asserts de Pyth
 
 ### Facilidad de uso (hacer primero)
 
-1. **Liberar espacio con un clic.** En el menú de cada proyecto (el de "Borrar", `ui.js` cerca de `menu-it peligro`) agregar "Liberar espacio".
+1. **HECHO el 15 nov 2026 (probado con un proyecto de prueba): Liberar espacio con un clic.** En el menú de cada proyecto (el de "Borrar", `ui.js` cerca de `menu-it peligro`) agregar "Liberar espacio".
    Borra solo `final.mp4` cuando existe al menos un archivo en `export/`, porque el final se puede volver a exportar y las exportaciones se conservan.
    Ruta nueva en `server.js`: `route.post('/proyectos/:id/liberar', ...)`. Mostrar cuánto se liberó con `toast`. Probar que el proyecto abre y exporta de nuevo.
 2. **Aviso de disco lleno antes de exportar.** En `exportar-ui.js`, antes de lanzar, pedir al servidor el espacio libre (`fs.statfsSync`) y avisar si quedan menos de 2 GB.

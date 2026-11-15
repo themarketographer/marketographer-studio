@@ -802,6 +802,11 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const p = S.p;
     const menuMas = h('div', { class: 'menu-pop', hidden: true, role: 'menu' },
       h('button', { type: 'button', role: 'menuitem', class: 'menu-it', onclick: async () => { cerrarMenu(); const r = await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); abrir(r.id); }, html: ic('copiar', 16) + ' Hacer una copia' }),
+      h('button', { type: 'button', role: 'menuitem', class: 'menu-it', onclick: async () => {
+        cerrarMenu();
+        if (!confirm('Se borra el video maestro de este proyecto para liberar espacio.\nTus exportaciones, tus ajustes y el video original se quedan. Si después quieres otra versión, vuelves a exportar.')) return;
+        try { const r = await api(`${A}/proyectos/${p.id}/liberar`, { method: 'POST' }); toast(r.liberado ? `Listo: liberaste ${gb(r.liberado)}.` : 'Este proyecto ya no tenía video maestro.'); abrir(p.id); } catch (e) { toast(e.message); }
+      }, html: ic('copiar', 16) + ' Liberar espacio' }),
       h('hr', { class: 'menu-sep' }),
       h('button', { type: 'button', role: 'menuitem', class: 'menu-it peligro', onclick: async () => { cerrarMenu(); if (confirm(`¿Borrar «${p.nombre}»?\nSe pierden su video, sus ajustes y lo que exportaste. No se puede deshacer.`)) { await api(`${A}/proyectos/${p.id}`, { method: 'DELETE' }); inicio(); } }, html: icon('trash') + ' Borrar este proyecto' }));
     const cerrarMenu = () => { menuMas.hidden = true; document.removeEventListener('pointerdown', fueraMenu, true); document.removeEventListener('keydown', escMenu, true); };

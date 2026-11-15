@@ -427,5 +427,20 @@ export default async function register({ route, config }) {
     return { __file: ruta, type: params.tipo === 'srt' ? 'text/plain; charset=utf-8' : params.tipo === 'md' ? 'text/markdown; charset=utf-8' : 'video/mp4' };
   });
   route.get('/proyectos/:id/extras', ({ params }) => { const d = dir(params.id); return Object.fromEntries(Object.entries(EXTRA).map(([k, f]) => [k, fs.existsSync(path.join(d, f))])); });
+  // Liberar espacio sin perder trabajo: borra el video maestro (final.mp4 y preview.mp4), que se puede volver a exportar.
+  // Solo si ya hay una exportación guardada en export/, que es la copia que se publica. Ajustes, original y recorte se conservan.
+  route.post('/proyectos/:id/liberar', ({ params }) => {
+    const d = dir(params.id);
+    if (jobs.has(params.id)) throw new Error('Espera a que termine el proceso de este proyecto.');
+    let exportados = [];
+    try { exportados = fs.readdirSync(path.join(d, 'export')).filter((f) => /\.(mp4|mov|gif|m4a|mp3|wav)$/i.test(f)); } catch { /* sin carpeta */ }
+    if (!exportados.length) throw new Error('Primero exporta el video: así queda una copia guardada antes de liberar espacio.');
+    let liberado = 0;
+    for (const f of ['final.mp4', 'preview.mp4']) {
+      const file = path.join(d, f);
+      if (fs.existsSync(file)) { liberado += fs.statSync(file).size; fs.rmSync(file, { force: true }); }
+    }
+    return { liberado, proyecto: resumen(params.id) };
+  });
   route.delete('/proyectos/:id', ({ params }) => { fs.rmSync(dir(params.id), { recursive: true, force: true }); });
 }

@@ -98,6 +98,10 @@ Ralentizar frases con voz baja, tipografía elástica, lista de puntos que desen
 
 ## Novedades de esta versión
 
+### v1.9
+
+- **Espacio en disco:** cada proyecto muestra cuánto ocupa y la lista dice el total. En el menú del proyecto, **Liberar espacio** borra el video maestro cuando ya tienes una exportación guardada: conservas tus exportaciones, tus ajustes y el video original.
+
 ### v1.8
 
 - **Ruleta de títulos:** ahora las palabras giran como un rodillo de tragamonedas: suben, frenan suave, rebotan un poco y se detienen en la última, con un leve desenfoque mientras giran. Se escribe igual que antes, con las palabras separadas por | y la última queda fija. La vista en vivo y el video exportado se ven igual.
