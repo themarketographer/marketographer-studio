@@ -169,6 +169,8 @@ button.pista { width: 100%; text-align: left; cursor: pointer; color: var(--ink)
 .paso-n { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--border); background: var(--surface-100); transition: background 300ms var(--ease), border-color 300ms var(--ease), color 300ms var(--ease), transform 300ms var(--ease); }
 .paso-b.on { color: var(--ink); } .paso-b.on .paso-n { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); transform: scale(1.1); }
 .paso-b.hecho .paso-n { background: var(--ink); border-color: var(--ink); color: var(--surface-100); }
+/* nombre corto del paso: solo se ve en la barra angosta de iconos */
+.paso-c { display: none; font-size: 10.5px; font-weight: 600; line-height: 1.1; letter-spacing: 0; }
 .paso-t { display: grid; gap: 1px; min-width: 0; } .paso-t strong { font-size: 12.5px; font-weight: 600; line-height: 1.2; } .paso-t small { font-size: 11px; line-height: 1.2; color: var(--ink-muted); }
 .paso-barra { position: absolute; left: 6px; bottom: 5px; height: 3px; width: calc((100% - 12px) / var(--n)); border-radius: 3px; background: var(--accent); transform: translateX(calc(var(--i) * 100%)); transition: transform 380ms var(--ease); }
 @media (max-width: 1180px) { .paso-t small { display: none; } }
@@ -672,12 +674,14 @@ html:has(.ed.ws), body:has(.ed.ws) { overflow: hidden; }
 .panel-x:hover { background: color-mix(in srgb, var(--ink) 18%, transparent); }
 .paso-head { display: flex; align-items: center; gap: 8px; }
 @media (min-width: 900px) {
-  .ed.ws { grid-template-columns: 60px minmax(0, 1fr); column-gap: 0; }
+  .ed.ws { grid-template-columns: 72px minmax(0, 1fr); column-gap: 0; }
   .ed.ws > .col-set { display: contents; }
   /* barra de pasos: solo iconos, ocupa lo justo */
-  .ed.ws > .col-set > .pasos { grid-area: 1 / 1; align-self: start; justify-self: start; display: flex; flex-direction: column; gap: 4px; width: 52px; padding: 6px 4px; z-index: 6; position: relative; top: 0; }
+  .ed.ws > .col-set > .pasos { grid-area: 1 / 1; align-self: start; justify-self: start; display: flex; flex-direction: column; gap: 4px; width: 66px; padding: 6px 4px; z-index: 6; position: relative; top: 0; }
   .ed.ws > .col-set > .pasos .paso-b { padding: 6px 0; } .ed.ws > .col-set > .pasos .paso-t, .ed.ws > .col-set > .pasos .paso-barra { display: none; }
   .ed.ws > .col-set > .pasos .paso-n { width: 40px; height: 40px; }
+  .ed.ws > .col-set > .pasos .paso-c { display: block; }
+  .ed.ws > .col-set > .pasos .paso-b { gap: 4px; }
   /* panel flotante sobre el área del video, tan alto como su contenido */
   .ed.ws > .col-set > .panel-flot { grid-area: 1 / 2; align-self: start; justify-self: start; z-index: 5; margin: 0 0 0 8px; width: min(450px, calc(100% - 16px)); max-height: 100%; overflow-y: auto; scrollbar-width: thin; background: var(--surface-200); border: 1px solid var(--border); border-radius: 22px; box-shadow: 0 18px 50px rgba(0,0,0,.45); padding: 16px; display: grid; gap: 14px; align-content: start; }
   .ed.ws.panel-cerrado > .col-set > .panel-flot { display: none; }
@@ -853,3 +857,9 @@ body.cursor-col, body.cursor-col * { cursor: col-resize !important; }
 
 .pz-wrap { display: flex; flex-direction: column; gap: 4px; }
 .pz-wrap .btn { align-self: flex-start; }
+
+/* Primer uso: tres pasos en vez de una lista vacía */
+.primeros { list-style: none; counter-reset: p; margin: 28px 0 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.primeros li { counter-increment: p; display: grid; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-200); }
+.primeros li::before { content: counter(p); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px; }
+.primeros span { color: var(--ink-muted); font-size: 13.5px; line-height: 1.45; }

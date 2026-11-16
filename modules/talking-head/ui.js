@@ -447,7 +447,12 @@ export async function mount(root, { api: api0, toast, h, icon }) {
           h('button', { class: 'pitem', onclick: () => abrir(p.id) },
             h('span', { class: 'pthumb' }, h('img', { src: `/api${A}/proyectos/${p.id}/miniatura`, alt: '', loading: 'lazy', onerror: (e) => e.target.remove() }), h('i', { html: ic('video', 22) })),
             h('span', { class: 'ptx' }, h('strong', {}, p.nombre), h('small', {}, `${p.tieneFinal ? 'Con video final' : p.analizado ? 'Analizado' : p.corriendo ? 'Procesando' : 'Sin analizar'}${p.creado ? ' · ' + new Date(p.creado).toLocaleDateString('es', { day: 'numeric', month: 'short' }) : ''}${p.peso ? ' · ' + gb(p.peso) : ''}`))),
-          h('button', { class: 'ib pdup', title: 'Duplicar para probar otra versión', 'aria-label': `Duplicar ${p.nombre}`, onclick: async (e) => { e.stopPropagation(); await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); inicio(); }, html: ic('copiar', 16) }))))) : ''); 
+          h('button', { class: 'ib pdup', title: 'Duplicar para probar otra versión', 'aria-label': `Duplicar ${p.nombre}`, onclick: async (e) => { e.stopPropagation(); await api(`${A}/proyectos/${p.id}/duplicar`, { method: 'POST' }); toast('Copia creada.'); inicio(); }, html: ic('copiar', 16) })))))
+        // Primer uso: en vez de una lista vacía, los tres pasos de lo que va a pasar.
+        : h('ol', { class: 'primeros' },
+          h('li', {}, h('strong', {}, 'Arrastra tu video arriba.'), h('span', {}, 'Vertical y hablando a cámara. El Estudio lo transcribe y te separa del fondo: tarda unos minutos.')),
+          h('li', {}, h('strong', {}, 'Revisa lo que propone.'), h('span', {}, 'Cortes de silencios, títulos, subtítulos, zooms y sonidos ya vienen puestos. Cambias solo lo que no te guste, en seis pasos.')),
+          h('li', {}, h('strong', {}, 'Exporta.'), h('span', {}, 'Eliges para qué red es y el video queda guardado, listo para subir.')))); 
   }
 
   // ---------- voz en off: grabas o subes un audio y se convierte en video con fondo ----------
@@ -826,7 +831,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (!p.analizado) {
       return root.replaceChildren(cab, titulo, h('div', { class: 'card center' },
         h('h2', {}, 'Primer paso: analizar el video'),
-        p.status?.error ? h('div', { class: 'callout warn' }, p.status.error) : null,
+        p.status?.error ? h('div', { class: 'callout warn' }, p.status.error, p.status.detalle ? h('button', { type: 'button', class: 'btn ghost sm', style: 'margin-left:10px', onclick: (e) => { navigator.clipboard.writeText(`Estudio Marketographer, proyecto ${p.id}:\n${p.status.detalle}`).then(() => { e.target.textContent = 'Copiado'; }); } }, 'Copiar detalle') : null) : null,
         h('p', { class: 'sub' }, 'El editor transcribe cada palabra, te separa del fondo y propone títulos, subtítulos, zooms y sonidos. La primera vez descarga el modelo de voz. Puedes dejarlo trabajando.'),
         h('button', { class: 'btn gold', onclick: () => lanzar('analizar', {}), html: icon('play') + ' Analizar video' })));
     }
@@ -1022,12 +1027,12 @@ export async function mount(root, { api: api0, toast, h, icon }) {
   const esVoz = () => !!(S.p && S.p.tipo === 'voz');
   const tarjetasVisibles = () => datosTarjetas().filter((t) => (esVoz() ? !['titulos', 'camara', 'fondo', 'formato'].includes(t.id) : t.id !== 'frases'));
   const PASOS = [
-    { id: 'recorte', n: 'Recortar', r: 'Qué se queda', ic: 'cortes', inline: 'recorte', nota: 'Borra frases y palabras con el texto. Después se cortan solas las pausas, respiraciones y ruidos, y afinas lo que quieras.' },
-    { id: 'guion', n: 'Corregir', r: 'Lo que queda', ic: 'doc', inline: 'guion', nota: 'Arregla nombres y palabras mal escritas, solo de lo que quedó en el video. Este paso cambia el texto de todo lo demás.' },
-    { id: 'pantalla', n: 'Texto en pantalla', r: 'Grandes y subtítulos', ic: 'subs', tiles: ['capas', 'titulos', 'subs', 'elementos'], nota: 'Todo lo que se escribe sobre el video. Cada tarjeta trae su propia tipografía y color.' },
-    { id: 'imagen', n: 'Imagen y cámara', r: 'Formato, zoom y color', ic: 'camara', tiles: ['formato', 'camara', 'fondo', 'look', 'filtros', 'pelicula'], nota: 'En qué formato se edita el video, cómo se mueve la cámara y cómo se ve la imagen.' },
-    { id: 'sonido', n: 'Sonido', r: 'Voz y música', ic: 'audio', tiles: ['audio', 'sonidos'], nota: 'Tu voz, la música de fondo y los efectos de sonido.' },
-    { id: 'publicar', n: 'Publicar', r: 'Final y portada', ic: 'publicar', tiles: ['cierre', 'publicar'], nota: 'El cierre del video, la portada y el caption. Exporta desde el botón dorado.' },
+    { id: 'recorte', c: 'Recortar', n: 'Recortar', r: 'Qué se queda', ic: 'cortes', inline: 'recorte', nota: 'Borra frases y palabras con el texto. Después se cortan solas las pausas, respiraciones y ruidos, y afinas lo que quieras.' },
+    { id: 'guion', c: 'Corregir', n: 'Corregir', r: 'Lo que queda', ic: 'doc', inline: 'guion', nota: 'Arregla nombres y palabras mal escritas, solo de lo que quedó en el video. Este paso cambia el texto de todo lo demás.' },
+    { id: 'pantalla', c: 'Texto', n: 'Texto en pantalla', r: 'Grandes y subtítulos', ic: 'subs', tiles: ['capas', 'titulos', 'subs', 'elementos'], nota: 'Todo lo que se escribe sobre el video. Cada tarjeta trae su propia tipografía y color.' },
+    { id: 'imagen', c: 'Imagen', n: 'Imagen y cámara', r: 'Formato, zoom y color', ic: 'camara', tiles: ['formato', 'camara', 'fondo', 'look', 'filtros', 'pelicula'], nota: 'En qué formato se edita el video, cómo se mueve la cámara y cómo se ve la imagen.' },
+    { id: 'sonido', c: 'Sonido', n: 'Sonido', r: 'Voz y música', ic: 'audio', tiles: ['audio', 'sonidos'], nota: 'Tu voz, la música de fondo y los efectos de sonido.' },
+    { id: 'publicar', c: 'Publicar', n: 'Publicar', r: 'Final y portada', ic: 'publicar', tiles: ['cierre', 'publicar'], nota: 'El cierre del video, la portada y el caption. Cuando esté listo, toca Exportar video.' },
   ];
   function tileEl(t) {
     const act = S.panel === t.id;
@@ -1053,7 +1058,7 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     const ant = PASOS[i - 1], sig = PASOS[i + 1];
     const nav = h('nav', { class: 'pasos', 'aria-label': 'Pasos para editar tu video', style: `--i:${i};--n:${PASOS.length}` },
       PASOS.map((p, k) => h('button', { type: 'button', class: 'paso-b' + (k === i ? ' on' : '') + (k < i ? ' hecho' : ''), 'aria-current': k === i ? 'step' : 'false', onclick: () => (k === i && window.innerWidth >= 900 ? alternarPanel() : irPaso(p.id)), title: `${k + 1}. ${p.n}: ${p.r}` },
-        h('span', { class: 'paso-n', html: k < i ? ic('check', 14) : ic(p.ic, 16) }), h('span', { class: 'paso-t' }, h('strong', {}, `${k + 1}. ${p.n}`), h('small', {}, p.r)))),
+        h('span', { class: 'paso-n', html: ic(p.ic, 16) }), h('span', { class: 'paso-c', 'aria-hidden': 'true' }, p.c), h('span', { class: 'paso-t' }, h('strong', {}, `${k + 1}. ${p.n}`), h('small', {}, p.r)))),
       h('i', { class: 'paso-barra', 'aria-hidden': 'true' }));
     const col = h('div', { class: 'col-set' }, nav,
       h('div', { class: 'panel-flot' },
@@ -1062,7 +1067,9 @@ export async function mount(root, { api: api0, toast, h, icon }) {
         P.inline ? inlineEl : tilesEl),
       h('div', { class: 'paso-pie' },
         ant ? h('button', { type: 'button', class: 'btn ghost', onclick: () => irPaso(ant.id), html: ic('izq', 16) + ` ${ant.n}` }) : h('span'),
-        sig ? h('button', { type: 'button', class: 'btn gold', onclick: () => irPaso(sig.id), html: `${sig.n} ` + ic('der', 16) }) : h('span'))));
+        sig ? h('button', { type: 'button', class: 'btn gold', onclick: () => irPaso(sig.id), html: `${sig.n} ` + ic('der', 16) })
+          // Último paso: el botón principal exporta, para no tener que buscarlo arriba.
+          : h('button', { type: 'button', class: 'btn gold', disabled: !!S.p.corriendo, onclick: () => abrirHoja('exportar'), html: icon('check') + ' Exportar video' }))));
     setTimeout(() => { if (P.inline) pintarPanel(); else pintarTiles(); decorar(col); }, 0);
     return col;
   }
@@ -3400,4 +3407,7 @@ Lo que necesito de ti:
   await cargarFuentes();
   sincronizarVocab();
   await inicio();
+  // Otro módulo (Storytelling) puede pedir que se abra un proyecto recién creado.
+  let pedido = null; try { pedido = sessionStorage.getItem('th-abrir'); sessionStorage.removeItem('th-abrir'); } catch { /* sin almacenamiento */ }
+  if (pedido && S.proyectos.some((x) => x.id === pedido)) abrir(pedido);
 }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
+import { explicarError } from './errores.js';
 
 export default async function register({ route, config }) {
   const base = path.join(config.root, 'data', 'th');
@@ -37,11 +38,16 @@ export default async function register({ route, config }) {
       analizado: fs.existsSync(path.join(d, 'plan.json')), tienePreview: fs.existsSync(path.join(d, 'preview.mp4')), tieneFinal: fs.existsSync(path.join(d, 'final.mp4')), tieneOriginal: fs.existsSync(path.join(d, 'words_orig.json')), tieneAlpha: fs.existsSync(path.join(d, 'alpha.mp4')), tieneAnterior: fs.existsSync(path.join(d, 'alpha_anterior.mp4')), lut: fs.existsSync(path.join(d, 'lut.txt')) ? fs.readFileSync(path.join(d, 'lut.txt'), 'utf8') : '' };
   };
 
+  const MIN_LIBRE = 2e9;
+  const espacioLibre = (d) => { try { const st = fs.statfsSync(d); return st.bavail * st.bsize; } catch { return null; } };
   function lanzar(id, args, alTerminar) {
     const py = pythonPath();
     if (!py) throw new Error('Falta instalar el motor. Haz doble clic en Instalar.command y vuelve a intentar.');
     if (jobs.has(id)) throw new Error('Ya hay un proceso en marcha en este proyecto.');
     const d = dir(id);
+    // Sin espacio el motor falla a la mitad y deja archivos rotos: mejor avisar antes de empezar.
+    const libre = espacioLibre(d);
+    if (libre !== null && libre < MIN_LIBRE) throw new Error(`Te quedan ${(libre / 1e9).toFixed(1).replace('.', ',')} GB libres en el disco y hacen falta al menos 2. Abre un proyecto que ya publicaste, toca los tres puntos y elige "Liberar espacio".`);
     const log = fs.openSync(path.join(d, 'motor.log'), 'a');
     const child = spawn(py, [path.join(engine, 'cli.py'), ...args.slice(0, 1), d, ...args.slice(1)], { cwd: engine, stdio: ['ignore', log, log] });
     jobs.set(id, child);
@@ -49,7 +55,10 @@ export default async function register({ route, config }) {
       jobs.delete(id);
       if (alTerminar) setImmediate(() => alTerminar(code));
       if (code !== 0 && !readJson(d, 'status.json')?.error) {
-        fs.writeFileSync(path.join(d, 'status.json'), JSON.stringify({ etapa: 'error', pct: 0, msg: 'El motor se detuvo', error: 'El motor se detuvo. Revisa motor.log en la carpeta del proyecto.' }));
+        // El mensaje sale de las últimas líneas de motor.log, dicho en simple y con qué hacer.
+        let cola = '';
+        try { const t = fs.readFileSync(path.join(d, 'motor.log'), 'utf8'); cola = t.slice(-6000); } catch { /* sin registro */ }
+        fs.writeFileSync(path.join(d, 'status.json'), JSON.stringify({ etapa: 'error', pct: 0, msg: 'El motor se detuvo', ...explicarError(cola) }));
       }
     });
   }
@@ -114,7 +123,7 @@ export default async function register({ route, config }) {
     const col = (c, fb) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : fb);
     const modo = ['degradado', 'color', 'imagen', 'blanco', 'cuadricula', 'negro', 'cuadnegra'].includes(query.fondo) ? query.fondo : 'cuadricula';
     const tpl = leerPlantillas().find((t) => t.id === query.plantilla);
-    fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify({ nombre: (query.titulo || 'Voz en off').replace(/\.[^.]+$/, '').slice(0, 80), tipo: 'voz', fondo: modo, c1: col(query.c1, '#2b1b4d'), c2: col(query.c2, '#0b0b12'), imagen: query.imagen ? limpio(query.imagen) : '',
+    fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify({ nombre: (query.titulo || 'Voz en off').replace(/\.[^.]+$/, '').slice(0, 80), tipo: 'voz', ...(query.historia ? { historia: true } : {}), fondo: modo, c1: col(query.c1, '#2b1b4d'), c2: col(query.c2, '#0b0b12'), imagen: query.imagen ? limpio(query.imagen) : '',
       ...(tpl ? { plantilla: { nombre: tpl.nombre, style: tpl.style, voz: tpl.voz, audio: tpl.audio } } : {}), creado: new Date().toISOString() }));
     lanzar(id, ['voz', '--audio', audio, '--fondo', modo, '--c1', col(query.c1, '#2b1b4d'), '--c2', col(query.c2, '#0b0b12'), '--imagen', query.imagen ? limpio(query.imagen) : '']);
     return resumen(id);

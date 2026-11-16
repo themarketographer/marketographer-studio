@@ -1,0 +1,17 @@
+.hist { display: grid; gap: 22px; max-width: 860px; padding: 22px; }
+.hist-campo { display: grid; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.hist-campo input { font: inherit; font-weight: 400; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-100); color: var(--ink); }
+.hist-paso { display: grid; gap: 10px; padding-top: 18px; border-top: 1px solid var(--border); }
+.hist-paso h2 { font-size: 17px; margin: 0; }
+.hist-fila { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hist-ok { color: var(--pos, #5fd08b); font-size: 13.5px; font-weight: 600; }
+.hist-imgs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.hist-imgs li { display: grid; gap: 6px; justify-items: center; font-size: 12.5px; color: var(--ink-muted); }
+.hist-imgs img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 12px; background: var(--surface-200); }
+.hist-mas { width: 100%; aspect-ratio: 9 / 16; display: grid; place-content: center; justify-items: center; gap: 8px; border: 1.5px dashed var(--border); border-radius: 12px; background: transparent; color: var(--ink-muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.hist-mas:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-muted); }
+.hist-pie { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding-top: 18px; border-top: 1px solid var(--border); }
+.hist-trab { font-weight: 600; }
+.hist-sec { font-size: 18px; margin: 28px 0 10px; }
+.hist-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.hist-lista small { color: var(--ink-muted); font-weight: 400; }

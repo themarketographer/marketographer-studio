@@ -41,7 +41,7 @@ Con la app instalada, el icono de *Estudio Marketographer*. En una copia clonada
 - **Guiones**: temas, formatos (Talking Head, Pro vs Noob, Storytelling), prompt listo para Claude, guion guardado y modo grabación.
 - **Talking Head**: editor completo con vista en vivo, voz en off, frases animadas, stickers y transiciones.
 - **Pro vs Noob**: dos tomas en la misma pantalla con etiquetas animadas.
-- **Pronto**: pipeline de Storytelling.
+- **Storytelling**: subes o grabas la narración y una imagen por escena; el Estudio transcribe, pone subtítulos, cambia de imagen en las pausas con un fundido y abre el resultado en el editor.
 
 ## Dónde vive cada cosa
 ```
@@ -97,6 +97,16 @@ Ralentizar frases con voz baja, tipografía elástica, lista de puntos que desen
 
 
 ## Novedades de esta versión
+
+### v1.10
+
+- **Storytelling ya funciona.** Narración más una imagen por escena. Los cambios de imagen caen en las pausas de tu voz, no a mitad de frase. Se afina y se exporta en el mismo editor de Talking Head.
+- **Los seis pasos del editor tienen nombre.** Antes, al avanzar, todos se volvían un círculo con un visto y no se sabía cuál era cuál. Ahora cada uno conserva su icono y dice Recortar, Corregir, Texto, Imagen, Sonido o Publicar.
+- **Exportar video** está también al final del último paso, además del botón de arriba.
+- **Errores en claro.** Si el motor se detiene, el aviso dice qué pasó y qué hacer (disco lleno, video que no se puede leer, falta internet, falta memoria), con un botón para copiar el detalle.
+- **Aviso de disco antes de empezar.** Con menos de 2 GB libres el Estudio no arranca un proceso que iba a fallar a la mitad, y te dice cómo liberar espacio.
+- **Primer uso.** Sin proyectos, la pantalla explica los tres pasos en vez de mostrar una lista vacía.
+- **Prueba completa:** `bash prueba-completa.sh <video>` sube un clip, lo analiza, hace el final y lo exporta, y borra todo al terminar.
 
 ### v1.9
 
