@@ -1174,6 +1174,12 @@ export async function mount(root, { api: api0, toast, h, icon }) {
     if (paso && S.paso !== paso.id) irPaso(paso.id);
     abrirHoja(id);
   }
+  // Crea una conexión o un punto en el instante actual con valores por defecto y abre su inspector.
+  function elementoRapido(tipo) {
+    const items = tipo === 'conexion' ? ['Foto', 'Venta'] : [], t = +tiempoActual().toFixed(2), dur = tipo === 'conexion' ? 2.2 : 0.8;
+    const ev = { id: 'x' + Date.now().toString(36), kind: tipo, items, text: items.join(' / ') || 'Punto', start: t, end: +(t + dur).toFixed(2), pos: 'centro', size: 'M', anim: 'fade', color: 'accent', sfx: sfxTipo(tipo, tipo === 'punto' ? 'whoosh' : 'none') };
+    plan().events.push(ev); S.abiertos.add(ev.id); abrirTarjeta('capas'); refrescar(); toast(`Agregué "${tipo === 'conexion' ? 'Conectar dos ideas' : 'Transición de punto'}" en el segundo ${t}.`);
+  }
   function buscadorHerramientas() {
     const inp = h('input', { type: 'search', class: 'buscar-inp', placeholder: 'Buscar herramienta', 'aria-label': 'Buscar herramienta', autocomplete: 'off', spellcheck: 'false' });
     const lista = h('div', { class: 'pop buscar-lista', hidden: true, role: 'listbox' });
@@ -1181,6 +1187,8 @@ export async function mount(root, { api: api0, toast, h, icon }) {
       ...tarjetasVisibles().map((t) => ({ n: t.n, r: t.r, ir: () => abrirTarjeta(t.id) })),
       ...PASOS.map((x) => ({ n: x.n, r: 'Paso ' + (PASOS.indexOf(x) + 1), ir: () => irPaso(x.id) })),
       { n: 'Ajustes', r: 'Tamaño de pantalla, vocabulario y copias', ir: () => abrirHoja('ajustes') },
+      { n: 'Conectar dos ideas', r: 'Dos ideas unidas por una línea, en este momento', ir: () => elementoRapido('conexion') },
+      { n: 'Transición de punto', r: 'Un punto crece y cambia la escena, en este momento', ir: () => elementoRapido('punto') },
       { n: 'Exportar', r: 'Elegir formatos y exportar', ir: () => abrirHoja('exportar') },
     ];
     const cerrar = () => { lista.hidden = true; inp.value = ''; };
@@ -2256,7 +2264,7 @@ No incluyas texto, logos ni marcas de agua. El título lo agrego yo después.`;
         seg('Tamaño', TAM, ev.size, (v) => { ev.size = v; refrescar(); }),
         seg('Animación', ANIM, ev.anim, (v) => { ev.anim = v; refrescar(); }),
         seg('Sonido', sfxOpts(), ev.sfx || 'none', (v) => { ev.sfx = v; oirSfx(v); refrescar(); }),
-        seg('Color', [['accent', 'Acento'], ['text', 'Texto']], ev.color, (v) => { ev.color = v; refrescar(); }),
+        seg('Color', [['accent', 'Acento'], ['text', 'Texto'], ['auto', 'Automático']], ev.color, (v) => { ev.color = v; refrescar(); }),
         slider('Altura en pantalla', 0.08, 0.85, 0.01, ev.y ?? ALTURA_POS[ev.pos] ?? 0.3, (v) => `${Math.round(v * 100)}% desde arriba${ev.y == null ? ' (automática)' : ''}`, (v) => { ev.y = v; cambio(); }),
         ev.y != null ? h('div', {}, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { delete ev.y; refrescar(); } }, 'Volver a la altura automática')) : null,
         ev.text.includes(' ') ? h('div', { class: 'ctl' }, h('span', { class: 'lbl' }, 'Palabra clave (toca una)'), h('div', { class: 'chips' }, ev.text.split(/\s+/).map((w, i) => h('button', { type: 'button', class: 'chip' + (w.startsWith('*') && w.length > 2 ? ' on' : ''), onclick: () => resaltarPalabra(ev, i) }, w.replace(/\*/g, ''))))) : null,
@@ -2625,6 +2633,7 @@ Lo que necesito de ti:
       ev.kind !== 'punto' ? h('label', { class: 'mini-f' }, 'Contenido', h('textarea', { rows: 3, onchange: (e) => { ev.items = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); ev.text = ev.items.join(' / '); cambio(); } }, (ev.items || []).join('\n'))) : null,
       ev.kind !== 'punto' ? seg('Tamaño', [['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']], ev.size || 'M', (v) => { ev.size = v; refrescar(); }) : null,
       ev.kind !== 'punto' ? seg('Color', [['accent', 'Acento'], ['text', 'Texto']], ev.color || 'accent', (v) => { ev.color = v; refrescar(); }) : null,
+      ev.kind === 'lista' ? toggle('Enfocar el punto actual', !!ev.foco, (v) => { ev.foco = v; refrescar(); }, 'Los demás puntos se ven más tenues y desenfocados.') : null,
       ev.kind !== 'punto' ? bloqueAltura(ev, { lista: 0.4, conexion: 0.3, numero: 0.42, barras: 0.36, rotulo: 0.78, llamada: 0.45, etiqueta: 0.2, seccion: 0.45 }[ev.kind] ?? 0.4) : null,
       ev.kind === 'llamada' ? slider('Punto al que apunta: a lo ancho', 0, 1, 0.01, ev.x ?? 0.7, (v) => `${Math.round(v * 100)}%`, (v) => { ev.x = v; cambio(); }, 0.7) : null,
       seg('Sonido', sfxOpts(), ev.sfx || 'none', (v) => { ev.sfx = v; oirSfx(v); refrescar(); })];
@@ -2739,7 +2748,15 @@ Lo que necesito de ti:
       v.onloadedmetadata = () => poner(v.duration || 3); v.onerror = () => poner(3);
     }
     const n = plan().events.filter((e) => e.kind === 'clip').length;
+    const sugB = (plan().sugerencias || []).filter((x) => x.kind === 'clip');
+    const usarSug = (x) => {
+      const ev = { id: 'b' + Date.now().toString(36), kind: 'clip', archivo: x.archivo, start: x.start, end: x.end, desde: 0, modo: 'pantalla', x: 0.5, y: 0.3, ancho: 0.5, pos: 'centro', text: x.archivo, sfx: 'none' };
+      plan().events.push(ev); plan().sugerencias = plan().sugerencias.filter((y) => y !== x); S.abiertos.add(ev.id); refrescar();
+    };
     return h('section', { class: 'card' }, h('h2', {}, 'B-roll: videos e imágenes extra'),
+      ...sugB.map((x) => h('div', { class: 'ev-top', style: 'border:1px dashed currentColor;border-radius:8px;padding:6px 10px' }, h('span', { class: 'tiempo' }, fmt(x.start)), h('span', { class: 'grow' }, `Sugerencia: "${x.archivo}" cuando lo nombras`),
+        h('button', { type: 'button', class: 'btn sm', onclick: () => usarSug(x) }, 'Usar'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { plan().sugerencias = plan().sugerencias.filter((y) => y !== x); refrescar(); } }, 'Descartar'))),
       h('p', { class: 'sub' }, 'Sube un video o una imagen y ponlo sobre el tuyo: a pantalla completa (tu voz sigue sonando) o en una ventana pequeña. Se ve igual al exportar. El sonido del B-roll no se usa.'),
       BROLLS.length ? h('div', { class: 'chips stk' }, BROLLS.map((f) => h('button', { type: 'button', class: 'chip stk-i', title: `Agregar ${f.nombre} en este momento`, onclick: () => agregarClip(f.nombre) },
         f.video ? h('video', { src: `/api${A}/broll/${encodeURIComponent(f.nombre)}#t=0.5`, muted: true, preload: 'metadata', playsinline: true }) : h('img', { src: `/api${A}/broll/${encodeURIComponent(f.nombre)}`, alt: f.nombre, loading: 'lazy' })))) : null,
@@ -2833,6 +2850,10 @@ Lo que necesito de ti:
     return h('section', { class: 'card' }, h('h2', {}, 'Cámara lenta'),
         h('p', { class: 'sub' }, 'Ralentiza una frase. Con voz grave, la voz baja de tono y se oscurece, como en los videos que están de moda. Los títulos, zooms y subtítulos siguen el ritmo.'),
         h('div', {}, h('button', { type: 'button', class: 'btn ghost', onclick: lentaAdd, html: icon('plus') + ' Cámara lenta desde este momento' })),
+        ...(plan().sugerencias || []).filter((x) => x.kind === 'ritmo').map((x) => h('div', { class: 'ev-top' },
+          h('span', { class: 'tiempo' }, `${fmt(x.start)} a ${fmt(x.end)}`), h('span', { class: 'grow' }, 'Frase en voz baja: ¿ir más lento aquí?'),
+          h('button', { type: 'button', class: 'btn sm', onclick: () => { lentos.push({ start: x.start, end: x.end, factor: +(1 / x.vel).toFixed(2), grave: false }); plan().sugerencias = plan().sugerencias.filter((y) => y !== x); refrescar(); } }, 'Aceptar'),
+          h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { plan().sugerencias = plan().sugerencias.filter((y) => y !== x); refrescar(); } }, 'Descartar'))),
         lentos.length ? h('ul', { class: 'evs' }, lentos.map((l) => h('li', { class: 'ev' },
           h('div', { class: 'ev-top' }, h('span', { class: 'tiempo' }, `${fmt(l.start)} a ${fmt(l.end)}`),
             h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { if (video) video.currentTime = tVideo(l.start); } }, 'Ir'),

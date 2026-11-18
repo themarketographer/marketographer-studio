@@ -140,8 +140,22 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
   }
 
   const colores = (st) => ({ accent: st.accent, text: st.text });
+  // Color automático: mira la franja del video donde va el texto (canvas de 32x32) y elige oscuro o blanco, igual que el motor.
+  const lienzoAuto = document.createElement('canvas'); lienzoAuto.width = lienzoAuto.height = 32;
+  function colorAuto(ev) {
+    try {
+      const a = areaOrigen(vs); if (!a) return '#ffffff';
+      const y = ev.y != null ? ev.y : (POS_Y[ev.pos] ?? 0.3), cx = lienzoAuto.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(vs, a[0], a[1] + a[3] * Math.max(y - 0.08, 0), a[2], a[3] * 0.16, 0, 0, 32, 32);
+      const d = cx.getImageData(0, 0, 32, 32).data; let r = 0, g = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+      const n = d.length / 4 * 255;
+      return 0.2126 * r / n + 0.7152 * g / n + 0.0722 * b / n > 0.55 ? '#141414' : '#ffffff';
+    } catch { return '#ffffff'; }
+  }
   function itemsTitulo(txt, ev, st) {
     const base = fontOf(st.font), emph = fontOf(st.emphFont || st.font), col = colores(st);
+    if (ev.color === 'auto') col.text = colorAuto(ev);
     const cBase = ev.color === 'accent' ? col.accent : col.text, cAlt = ev.color === 'accent' ? col.text : col.accent;
     return casoTexto(txt, st.titulosCaso || 'mayus').split(/\s+/).filter(Boolean).map((tk) => {
       const e = tk.length > 2 && tk.startsWith('*') && tk.endsWith('*');
@@ -580,7 +594,7 @@ export function crearLive({ onEdit, h, srcUrl, alphaUrl, getPlan, getWords, fam,
       for (let i = 0; i < n; i++) {
         const u = i < n - 1 ? clamp((d - 0.15 - i * paso) / 0.25) * (1 - clamp((d - 0.15 - (i + 1) * paso) / 0.25)) : clamp((d - 0.15 - i * paso) / 0.25);
         const cy = top + gap * i;
-        una(items[i], px, col.text, W / 2, cy, alpha * (0.75 - 0.25 * u), 1, W / 90);
+        una(items[i], px, col.text, W / 2, cy, alpha * (ev.foco ? 0.45 : 0.75 - 0.25 * u), 1, ev.foco ? 6 * W / 1080 : W / 90);
         if (u > 0.01) una(items[i], px, col.accent, W / 2, cy, alpha * u, 1 + 0.07 * easeOut(u));
       }
     } else if (k === 'conexion') {

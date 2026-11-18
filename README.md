@@ -98,6 +98,14 @@ Ralentizar frases con voz baja, tipografía elástica, lista de puntos que desen
 
 ## Novedades de esta versión
 
+### v1.11
+
+- **Color de texto automático.** En un título, elige "Automático" y el Estudio mira el video donde va el texto y usa oscuro o blanco según lo que se lea mejor.
+- **Frases en voz baja.** Si dices una frase mucho más bajo que el resto, aparece una sugerencia en Cámara lenta: "¿ir más lento aquí?" con Aceptar y Descartar. Nada se aplica solo.
+- **Lista con foco.** Casilla "Enfocar el punto actual": los demás puntos se ven tenues y desenfocados.
+- **Sugerencias de B-roll.** Si el nombre de un clip (por ejemplo `cafe-latte.mp4`) coincide con algo que dices, te propone ponerlo en ese momento con un botón "Usar".
+- **Buscador de herramientas.** Ahora encuentra "Conectar dos ideas" y "Transición de punto" y los crea en el instante donde estás.
+
 ### v1.10
 
 - **Storytelling ya funciona.** Narración más una imagen por escena. Los cambios de imagen caen en las pausas de tu voz, no a mitad de frase. Se afina y se exporta en el mismo editor de Talking Head.

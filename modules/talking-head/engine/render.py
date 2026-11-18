@@ -740,13 +740,29 @@ def run(proj, calidad="final", desde=0.0, hasta=None, tramo=None, salida=None, h
     sprites = {}
     graf.ESCENAS = proj.parent.parent / "escenas"
     graf.BROLL = proj.parent.parent / "broll"
-    for ev in events:
-        if ev.get("kind") in graf.TIPOS:
-            sprites[ev["id"]] = graf.preparar(ev, style, W, H, colors)
-        elif ev.get("anim") == "ruleta" and "|" in ev["text"]:
-            sprites[ev["id"]] = [title_sprite({**ev, "text": p.strip()}, style, W, H, colors) for p in ev["text"].split("|") if p.strip()]
+    def colores_de(ev):
+        # "color": "auto" lee el cuadro del video donde va el texto y elige oscuro o blanco
+        if ev.get("color") != "auto":
+            return ev, colors
+        sc = cv2.VideoCapture(str(src))
+        sc.set(cv2.CAP_PROP_POS_MSEC, 1000 * (ev["start"] + min(ev["end"] - ev["start"], 2) / 2))
+        ok, fr = sc.read(); sc.release()  # shortcut: usa el tiempo del video original, sin contar cortes; sirve de sobra para elegir entre claro y oscuro
+        y = ev["y"] if ev.get("y") is not None else POS_Y.get(ev.get("pos"), 0.30)
+        if ok:
+            h0 = fr.shape[0]; zona = fr[int(h0 * max(y - 0.08, 0)):int(h0 * min(y + 0.08, 1))]
+            oscuro = graf.color_legible(zona)
         else:
-            sprites[ev["id"]] = title_sprite(ev, style, W, H, colors)
+            oscuro = colors["text"]
+        return {**ev, "color": "text"}, {**colors, "text": oscuro}
+
+    for ev in events:
+        ev, colors_ev = colores_de(ev)
+        if ev.get("kind") in graf.TIPOS:
+            sprites[ev["id"]] = graf.preparar(ev, style, W, H, colors_ev)
+        elif ev.get("anim") == "ruleta" and "|" in ev["text"]:
+            sprites[ev["id"]] = [title_sprite({**ev, "text": p.strip()}, style, W, H, colors_ev) for p in ev["text"].split("|") if p.strip()]
+        else:
+            sprites[ev["id"]] = title_sprite(ev, style, W, H, colors_ev)
     evitar_solapes(events, sprites, style, H)
     puntos = sorted(graf.mitad_punto(e) for e in events if e.get("kind") == "punto")
     subs = style["subs"]

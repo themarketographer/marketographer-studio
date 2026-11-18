@@ -55,6 +55,39 @@ def frases(words, pausa=0.35, max_pal=7):
     return out
 
 
+def tramos_voz_baja(env, palabras, minimo=1.5, umbral=0.6):
+    """Frases dichas más bajo que el resto (menos del 60% de la mediana, más de 1,5 s). Devuelve sugerencias de ritmo; no se aplican solas."""
+    hop = env.get("hop", 0.01)
+    amp = [10 ** (d / 20) for d in env["db"]]
+    medias = []
+    for fr in frases(palabras):
+        a, b = fr[0]["start"], fr[-1]["end"]
+        tramo = amp[int(a / hop):max(int(b / hop), int(a / hop) + 1)]
+        if tramo:
+            medias.append((a, b, sum(tramo) / len(tramo)))
+    if not medias:
+        return []
+    med = sorted(m for _, _, m in medias)[len(medias) // 2]
+    return [{"kind": "ritmo", "start": round(a, 2), "end": round(b, 2), "vel": 0.9, "sugerido": True}
+            for a, b, m in medias if m < umbral * med and b - a > minimo]
+
+
+def sugerir_broll(palabras, archivos, dur=2.5, separacion=8.0):
+    """Para cada archivo de B-roll, busca en lo que dices las palabras (de 4+ letras) de su nombre. Una sugerencia cada 8 s como máximo."""
+    sug = []
+    for arch in archivos:
+        claves = {norm(t) for t in re.split(r"[-_\s.]+", Path(arch).stem) if len(norm(t)) >= 4}
+        for w in palabras:
+            if norm(w["w"]) in claves:
+                sug.append({"kind": "clip", "archivo": arch, "start": round(w["start"], 2), "end": round(w["start"] + dur, 2), "sugerido": True})
+                break
+    out = []
+    for x in sorted(sug, key=lambda x: x["start"]):
+        if not out or x["start"] - out[-1]["start"] >= separacion:
+            out.append(x)
+    return out
+
+
 def combos_cfg():
     import json
     return json.loads((Path(__file__).parent / "combos.json").read_text(encoding="utf8"))
@@ -265,5 +298,24 @@ def run(proj, solo=None):
         if tpl and tpl.get("style"):  # la plantilla manda sobre los valores por defecto de la voz en off
             for k, v in tpl["style"].items():
                 style[k] = {**style[k], **v} if isinstance(v, dict) and isinstance(style.get(k), dict) else v
-    save(proj, "plan.json", {**prev, "version": 2, "duration": round(dur, 2), "fps": fps, "style": style, "events": eventos, "zooms": zooms, **({"voz": prev.get("voz") or {"secuencia": "mezcla", "combos": combos_cfg()["mezcla"], "emojis": True}} if voz else {})})
+    env = load(proj, "envolvente.json")  # solo si ya está calculada; no se calcula aquí
+    broll = sugerir_broll(words, sorted(f.name for f in (proj.parent.parent / "broll").glob("*") if f.is_file())) if (proj.parent.parent / "broll").is_dir() else []
+    sug = broll + [x for x in (tramos_voz_baja(env, words) if env else []) if not any(l["start"] < x["end"] and l["end"] > x["start"] for l in prev.get("lentos") or [])]
+    save(proj, "plan.json", {**prev, "sugerencias": sug, "version": 2, "duration": round(dur, 2), "fps": fps, "style": style, "events": eventos, "zooms": zooms, **({"voz": prev.get("voz") or {"secuencia": "mezcla", "combos": combos_cfg()["mezcla"], "emojis": True}} if voz else {})})
     status(proj, "plan", 100, f"{len(eventos)} textos y {len(zooms)} zooms propuestos")
+
+
+if __name__ == "__main__":
+    pal = [{"w": f"p{i}", "start": i * 0.5, "end": i * 0.5 + 0.4} for i in range(24)]  # 24 palabras, una frase de 6 palabras cada 3 s si hay pausas
+    for i in range(5, 24, 6):
+        pal[i]["end"] = pal[i]["start"] + 0.05
+        if i + 1 < 24:
+            pal[i + 1]["start"] += 0.6; pal[i + 1]["end"] += 0.6
+    db = [-20.0] * 1300
+    for i in range(int(pal[12]["start"] / 0.01), int(pal[17]["end"] / 0.01) + 1):
+        db[i] = -20 + 20 * __import__("math").log10(0.4)  # al 40% de volumen
+    r = tramos_voz_baja({"hop": 0.01, "db": db}, pal)
+    assert len(r) == 1 and r[0]["start"] == round(pal[12]["start"], 2) and r[0]["vel"] == 0.9, r
+    sb = sugerir_broll([{"w": "el", "start": 3.0, "end": 3.2}, {"w": "café", "start": 12.0, "end": 12.4}], ["cafe-latte.mp4"])
+    assert len(sb) == 1 and sb[0]["start"] == 12.0 and sb[0]["archivo"] == "cafe-latte.mp4", sb
+    print("plan OK")

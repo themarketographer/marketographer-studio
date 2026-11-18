@@ -204,7 +204,7 @@ def preparar(ev, style, W, H, colors):
     if k == "lista":
         nitems = items[:6]
         activos = [_sprite(t, f, "accent", style, W, H, colors) for t in nitems]
-        opacos = [_borroso(_sprite(t, f, "text", style, W, H, colors), max(W // 90, 5)) for t in nitems]
+        opacos = [_borroso(_sprite(t, f, "text", style, W, H, colors), 6 if ev.get("foco") else max(W // 90, 5)) for t in nitems]  # foco: radio 6 fijo
         return {"n": len(nitems), "activos": activos, "opacos": opacos}
     if k == "conexion":
         nodos = [_sprite(t, f * 0.9, "text" if i % 2 else "accent", style, W, H, colors) for i, t in enumerate(items[:4])]
@@ -258,7 +258,7 @@ def dibujar(dst, ev, obj, t, W, H, colors):
         for i in range(n):
             u = R.clamp((d - 0.15 - i * paso) / 0.25) * (1 - R.clamp((d - 0.15 - (i + 1) * paso) / 0.25)) if i < n - 1 else R.clamp((d - 0.15 - i * paso) / 0.25)
             cy = top + gap * i
-            _blit_scaled(dst, obj["opacos"][i], W / 2, cy, alpha * (0.75 - 0.25 * u) * (1 - u * 0.0), 1.0)
+            _blit_scaled(dst, obj["opacos"][i], W / 2, cy, alpha * (0.45 if ev.get("foco") else 0.75 - 0.25 * u), 1.0)
             if u > 0.01:
                 _blit_scaled(dst, obj["activos"][i], W / 2, cy, alpha * u, 1.0 + 0.07 * R.ease_out(u))
     elif k == "conexion":
@@ -604,6 +604,12 @@ def _dibujar_frase(dst, ev, obj, t, W, H, colors):
 OSCURO = (24, 24, 24)
 
 
+def color_legible(region):
+    """Color de texto (RGB) legible sobre una zona del video (BGR): oscuro si la zona es clara, blanco si es oscura."""
+    b, g, r = (np.asarray(region, dtype=np.float32).reshape(-1, 3).mean(axis=0) / 255.0)
+    return (20, 20, 20) if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 else (255, 255, 255)
+
+
 def _lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
@@ -793,3 +799,9 @@ def _dibujar_clip(dst, ev, obj, t, W, H):
         fx_, fy_ = kf_valor(ev, "fx", d, float(ev.get("fx", 0.5))), kf_valor(ev, "fy", d, float(ev.get("fy", 0.5)))
         x0, y0 = int(round((nw - W) * min(max(fx_, 0), 1))), int(round((nh - H) * min(max(fy_, 0), 1)))
         cv2.addWeighted(dst, 1 - al, img[y0:y0 + H, x0:x0 + W], al, 0, dst)
+
+
+if __name__ == "__main__":
+    assert color_legible(np.full((8, 8, 3), 255, np.uint8)) == (20, 20, 20)
+    assert color_legible(np.zeros((8, 8, 3), np.uint8)) == (255, 255, 255)
+    print("graficos OK")
